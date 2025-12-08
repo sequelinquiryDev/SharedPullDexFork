@@ -24,7 +24,7 @@ export async function fetchMessages() {
   try {
     const { data, error } = await supabase
       .from('chat_messages')
-      .select('id, username, message, created_at')
+      .select('id, user, text, created_at')
       .order('created_at', { ascending: true })
       .limit(200);
 
@@ -33,7 +33,13 @@ export async function fetchMessages() {
       return [];
     }
 
-    return data || [];
+    // Map to expected format
+    return (data || []).map(msg => ({
+      id: msg.id,
+      username: msg.user,
+      message: msg.text,
+      created_at: msg.created_at
+    }));
   } catch (e) {
     console.error('fetchMessages exception:', e);
     return [];
@@ -46,7 +52,7 @@ export async function sendMessage(username: string, message: string) {
   try {
     const { error } = await supabase
       .from('chat_messages')
-      .insert({ username, message });
+      .insert({ user: username, text: message });
 
     if (error) {
       console.error('Send message error:', error);

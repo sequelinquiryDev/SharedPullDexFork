@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchMessages, sendMessage, subscribeToMessages } from '@/lib/supabaseClient';
 
@@ -98,12 +97,12 @@ export function ChatPanel() {
     const messageText = inputValue.trim();
     setInputValue('');
     setIsSending(true);
-    
+
     const success = await sendMessage(username, messageText);
     if (!success) {
       setInputValue(messageText);
     }
-    
+
     setIsSending(false);
   }, [inputValue, username, isSending]);
 

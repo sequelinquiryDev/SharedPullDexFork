@@ -249,24 +249,6 @@ export default function Home() {
           priceUsd={fromPriceUsd}
         />
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            margin: '8px 0',
-          }}
-        >
-          <div
-            className="swap-outside"
-            onClick={handleSwapTokens}
-            role="button"
-            aria-label="Swap tokens"
-            data-testid="button-swap-direction"
-          >
-            ⇅
-          </div>
-        </div>
-
         <TokenInput
           side="to"
           selectedToken={toToken}
@@ -293,7 +275,6 @@ export default function Home() {
               role="button"
               aria-label="Swap From ↔ To"
               data-testid="button-swap-tokens"
-              style={{ display: 'none' }}
             >
               ⇅
             </div>

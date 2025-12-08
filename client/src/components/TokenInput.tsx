@@ -79,6 +79,16 @@ export function TokenInput({
     handleSearch(searchQuery.trim().toLowerCase());
   };
 
+  const handleBlur = () => {
+    // Normalize to selected token when user leaves input
+    if (selectedToken) {
+      setSearchQuery(selectedToken.symbol);
+    } else {
+      setSearchQuery('');
+    }
+    setShowSuggestions(false);
+  };
+
   const handleSelectToken = (token: Token) => {
     onTokenSelect(token);
     setSearchQuery(token.symbol);
@@ -167,6 +177,7 @@ export function TokenInput({
             value={searchQuery}
             onChange={handleInputChange}
             onFocus={handleFocus}
+            onBlur={handleBlur}
             style={{
               padding: '10px 12px',
               borderRadius: '8px',
