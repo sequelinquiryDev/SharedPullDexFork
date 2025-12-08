@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { fetchMessages, sendMessage, subscribeToMessages } from '@/lib/supabaseClient';
 
@@ -16,6 +17,8 @@ export function ChatPanel() {
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('nola_chat_username');
@@ -43,6 +46,28 @@ export function ChatPanel() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        isOpen &&
+        sidebarRef.current &&
+        toggleRef.current &&
+        !sidebarRef.current.contains(e.target as Node) &&
+        !toggleRef.current.contains(e.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
 
   const loadMessages = async () => {
     const msgs = await fetchMessages();
@@ -88,14 +113,16 @@ export function ChatPanel() {
   return (
     <>
       <div
+        ref={toggleRef}
         className="chat-toggle"
         onClick={handleToggle}
         data-testid="button-chat-toggle"
       >
-        Public Chat
+        Public Chat 🔘
       </div>
 
       <div
+        ref={sidebarRef}
         className={`chat-sidebar ${isOpen ? 'open' : ''}`}
         data-testid="panel-chat-sidebar"
       >
@@ -140,7 +167,7 @@ export function ChatPanel() {
       </div>
 
       {showUsernameModal && (
-        <div className="username-modal" data-testid="modal-username">
+        <div className="username-modal" style={{ display: 'flex' }} data-testid="modal-username">
           <div className="modal-content">
             <h3 style={{ color: '#e0b3ff' }}>Choose a Username</h3>
             <input

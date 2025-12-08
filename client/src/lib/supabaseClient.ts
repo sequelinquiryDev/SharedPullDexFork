@@ -1,98 +1,77 @@
-import { config } from './config';
+import { createClient } from '@supabase/supabase-js';
 
-interface Message {
-  id: string;
-  username: string;
-  message: string;
-  created_at: string;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase credentials missing. Chat will not work.');
 }
 
-let supabaseClient: any = null;
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
-async function getSupabase() {
-  if (supabaseClient) return supabaseClient;
-  
-  if (!config.supabaseUrl || !config.supabaseAnonKey) {
-    console.warn('Supabase not configured');
-    return null;
-  }
-
-  try {
-    const { createClient } = await import('@supabase/supabase-js');
-    supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
-    return supabaseClient;
-  } catch (e) {
-    console.warn('Failed to load Supabase', e);
-    return null;
-  }
-}
-
-export async function fetchMessages(): Promise<Message[]> {
-  const supabase = await getSupabase();
+export async function fetchMessages() {
   if (!supabase) return [];
 
   try {
     const { data, error } = await supabase
-      .from('nola_chat')
-      .select('*')
+      .from('chat_messages')
+      .select('id, username, message, created_at')
       .order('created_at', { ascending: true })
-      .limit(100);
+      .limit(200);
 
     if (error) {
-      console.error('Error fetching messages:', error);
+      console.error('Fetch messages error:', error);
       return [];
     }
+
     return data || [];
   } catch (e) {
-    console.error('Failed to fetch messages:', e);
+    console.error('fetchMessages exception:', e);
     return [];
   }
 }
 
-export async function sendMessage(username: string, message: string): Promise<boolean> {
-  const supabase = await getSupabase();
+export async function sendMessage(username: string, message: string) {
   if (!supabase) return false;
 
   try {
-    const { error } = await supabase.from('nola_chat').insert([{ username, message }]);
+    const { error } = await supabase
+      .from('chat_messages')
+      .insert({ username, message });
+
     if (error) {
-      console.error('Error sending message:', error);
+      console.error('Send message error:', error);
       return false;
     }
+
     return true;
   } catch (e) {
-    console.error('Failed to send message:', e);
+    console.error('sendMessage exception:', e);
     return false;
   }
 }
 
-export function subscribeToMessages(
-  callback: (message: Message) => void
-): (() => void) | null {
-  let cleanup: (() => void) | null = null;
+export function subscribeToMessages(callback: (message: any) => void) {
+  if (!supabase) return null;
 
-  getSupabase().then((supabase) => {
-    if (!supabase) return;
-
-    const channel = supabase
-      .channel('nola_chat_changes')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'nola_chat' },
-        (payload: any) => {
-          if (payload.new) {
-            callback(payload.new as Message);
-          }
-        }
-      )
-      .subscribe();
-
-    cleanup = () => {
-      supabase.removeChannel(channel);
-    };
-  });
+  const subscription = supabase
+    .channel('chat_messages_channel')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+      },
+      (payload) => {
+        callback(payload.new);
+      }
+    )
+    .subscribe();
 
   return () => {
-    if (cleanup) cleanup();
+    subscription.unsubscribe();
   };
 }

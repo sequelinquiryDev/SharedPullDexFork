@@ -110,6 +110,18 @@ body {
   min-height: 100dvh;
 }
 
+/* ===== SECTION WRAPPER - CENTER CONTENT ===== */
+.section-wrapper {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+  position: relative;
+  z-index: 1;
+}
+
 /* ===== NEBULA BACKGROUND EFFECT ===== */
 body::before {
   content: '';
@@ -262,6 +274,11 @@ body::before {
   z-index: 220;
   box-shadow: 0 10px 30px rgba(120,0,255,0.08);
   -webkit-overflow-scrolling: touch;
+  display: none;
+}
+
+.suggestions.show {
+  display: block;
 }
 
 .suggestion-item {
@@ -769,16 +786,38 @@ button:focus-visible,
 .glassy-btn:focus-visible,
 .quick-cta:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 6px rgba(180,68,255,0.08), 0 10px 30px rgba(106,0,255,0.06);
+  box-shadow: 0 0 0 4px rgba(180,68,255,0.08);
 }
 
-input:focus {
+button:focus,
+.glassy-btn:focus,
+.quick-cta:focus {
   outline: none;
+  box-shadow: none;
 }
 
-/* Remove tap highlight everywhere */
-* {
+input:focus,
+input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Remove tap highlight and blue shadows everywhere */
+*,
+*:focus,
+*:active {
   -webkit-tap-highlight-color: transparent !important;
+  outline: none !important;
+}
+
+button::-moz-focus-inner {
+  border: 0;
+}
+
+/* Remove default browser focus ring */
+:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* ===== UTILITY CLASSES ===== */

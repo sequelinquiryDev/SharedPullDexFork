@@ -1,5 +1,6 @@
+
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Token, TokenStats, searchTokens, getTopTokens, getTokenPriceUSD, getPlaceholderImage, getCgStatsMap, getTokenMap } from '@/lib/tokenService';
+import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap } from '@/lib/tokenService';
 import { formatUSD, low, isAddress } from '@/lib/config';
 
 interface TokenInputProps {
@@ -29,18 +30,17 @@ export function TokenInput({
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleSearch = useCallback(async (query: string) => {
     if (!query) {
       const topTokens = getTopTokens(15);
-      const withPrices = await Promise.all(
-        topTokens.map(async ({ token, stats }) => ({
-          token,
-          stats,
-          price: stats?.price ?? (await getTokenPriceUSD(token.address, token.decimals)),
-        }))
-      );
+      const withPrices = topTokens.map(({ token, stats }) => ({
+        token,
+        stats,
+        price: stats?.price ?? null,
+      }));
       setSuggestions(withPrices);
       setShowSuggestions(true);
       return;
@@ -48,29 +48,15 @@ export function TokenInput({
 
     setLoading(true);
     try {
+      const results = await searchTokens(query);
       const cgStats = getCgStatsMap();
-      
-      if (isAddress(query)) {
-        const tokenMap = getTokenMap();
-        let token = tokenMap.get(low(query));
-        if (token) {
-          const stats = cgStats.get(low(token.symbol)) || cgStats.get(low(token.name)) || null;
-          const price = stats?.price ?? (await getTokenPriceUSD(token.address, token.decimals));
-          setSuggestions([{ token, stats, price }]);
-          setShowSuggestions(true);
-        }
-      } else {
-        const results = await searchTokens(query);
-        const withPrices = await Promise.all(
-          results.slice(0, 12).map(async (token) => {
-            const stats = cgStats.get(low(token.symbol)) || cgStats.get(low(token.name)) || null;
-            const price = stats?.price ?? null;
-            return { token, stats, price };
-          })
-        );
-        setSuggestions(withPrices);
-        setShowSuggestions(true);
-      }
+      const withPrices = results.slice(0, 12).map((token) => {
+        const stats = cgStats.get(low(token.symbol)) || cgStats.get(low(token.name)) || null;
+        const price = stats?.price ?? null;
+        return { token, stats, price };
+      });
+      setSuggestions(withPrices);
+      setShowSuggestions(true);
     } finally {
       setLoading(false);
     }
@@ -93,17 +79,6 @@ export function TokenInput({
     handleSearch(searchQuery.trim().toLowerCase());
   };
 
-  const handleBlur = () => {
-    setTimeout(() => {
-      if (!suggestionsRef.current?.contains(document.activeElement)) {
-        setShowSuggestions(false);
-        if (selectedToken) {
-          setSearchQuery(selectedToken.symbol);
-        }
-      }
-    }, 200);
-  };
-
   const handleSelectToken = (token: Token) => {
     onTokenSelect(token);
     setSearchQuery(token.symbol);
@@ -116,6 +91,22 @@ export function TokenInput({
       setSearchQuery(selectedToken.symbol);
     }
   }, [selectedToken]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    if (showSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showSuggestions]);
 
   useEffect(() => {
     return () => {
@@ -132,7 +123,7 @@ export function TokenInput({
   const change = stats?.change;
 
   return (
-    <div className="input-box" style={{ position: 'relative' }} data-testid={`input-box-${side}`}>
+    <div className="input-box" style={{ position: 'relative' }} ref={containerRef} data-testid={`input-box-${side}`}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
         <div className="token-icon" style={{ position: 'relative' }}>
           {selectedToken?.logoURI ? (
@@ -176,7 +167,6 @@ export function TokenInput({
             value={searchQuery}
             onChange={handleInputChange}
             onFocus={handleFocus}
-            onBlur={handleBlur}
             style={{
               padding: '10px 12px',
               borderRadius: '8px',
@@ -230,8 +220,7 @@ export function TokenInput({
       {showSuggestions && (
         <div
           ref={suggestionsRef}
-          className="suggestions"
-          style={{ display: 'block' }}
+          className="suggestions show"
           data-testid={`suggestions-${side}`}
         >
           {loading ? (

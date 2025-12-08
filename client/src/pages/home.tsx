@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import { ethers } from 'ethers';
@@ -6,7 +7,7 @@ import { SlippageControl } from '@/components/SlippageControl';
 import { showToast } from '@/components/Toast';
 import { Token, loadTokensAndMarkets, getTokenPriceUSD, getTokenMap } from '@/lib/tokenService';
 import { getBestQuote, executeSwap, approveToken, checkAllowance, parseSwapError, QuoteResult } from '@/lib/swapService';
-import { config, low, explorerTxLink } from '@/lib/config';
+import { config, low } from '@/lib/config';
 
 export default function Home() {
   const { address, isConnected } = useAccount();
@@ -22,7 +23,6 @@ export default function Home() {
   const [toPriceUsd, setToPriceUsd] = useState<number | null>(null);
 
   const [quote, setQuote] = useState<QuoteResult | null>(null);
-  const [isQuoting, setIsQuoting] = useState(false);
   const [isSwapping, setIsSwapping] = useState(false);
   const [tokensLoaded, setTokensLoaded] = useState(false);
 
@@ -37,6 +37,7 @@ export default function Home() {
     });
   }, []);
 
+  // Fetch prices for selected tokens
   useEffect(() => {
     if (fromToken) {
       getTokenPriceUSD(fromToken.address, fromToken.decimals).then(setFromPriceUsd);
@@ -53,56 +54,83 @@ export default function Home() {
     }
   }, [toToken]);
 
-  const fetchQuote = useCallback(async () => {
-    if (!fromToken || !toToken || !fromAmount || parseFloat(fromAmount) <= 0) {
-      setToAmount('');
-      setQuote(null);
-      return;
-    }
-
-    setIsQuoting(true);
-    try {
-      const amountBN = ethers.utils.parseUnits(fromAmount, fromToken.decimals);
-      const result = await getBestQuote(
-        fromToken.address,
-        toToken.address,
-        amountBN.toString(),
-        fromToken.decimals,
-        toToken.decimals,
-        slippage
-      );
-
-      if (result) {
-        setQuote(result);
-        setToAmount(result.normalized.toFixed(6));
+  // Simple price-based estimate (updates immediately)
+  useEffect(() => {
+    if (fromToken && toToken && fromAmount && fromPriceUsd && toPriceUsd) {
+      const amount = parseFloat(fromAmount);
+      if (!isNaN(amount) && amount > 0) {
+        const fromUSD = amount * fromPriceUsd;
+        const estimatedTo = fromUSD / toPriceUsd;
+        setToAmount(estimatedTo.toFixed(6));
       } else {
-        setQuote(null);
         setToAmount('');
-        showToast('No quotes available for this pair', { type: 'warn' });
       }
-    } catch (e) {
-      console.error('Quote error:', e);
+    } else {
       setToAmount('');
-      setQuote(null);
-    } finally {
-      setIsQuoting(false);
     }
+  }, [fromAmount, fromPriceUsd, toPriceUsd, fromToken, toToken]);
+
+  // Fetch real quote in background for accurate swap
+  useEffect(() => {
+    const fetchQuote = async () => {
+      if (!fromToken || !toToken || !fromAmount || parseFloat(fromAmount) <= 0) {
+        setQuote(null);
+        return;
+      }
+
+      try {
+        const amountBN = ethers.utils.parseUnits(fromAmount, fromToken.decimals);
+        const result = await getBestQuote(
+          fromToken.address,
+          toToken.address,
+          amountBN.toString(),
+          fromToken.decimals,
+          toToken.decimals,
+          slippage
+        );
+
+        if (result) {
+          setQuote(result);
+        } else {
+          setQuote(null);
+        }
+      } catch (e) {
+        console.error('Quote error:', e);
+        setQuote(null);
+      }
+    };
+
+    const debounce = setTimeout(fetchQuote, 500);
+    return () => clearTimeout(debounce);
   }, [fromToken, toToken, fromAmount, slippage]);
 
+  // Refresh prices periodically
   useEffect(() => {
-    const debounce = setTimeout(() => {
-      fetchQuote();
-    }, 300);
-    return () => clearTimeout(debounce);
-  }, [fetchQuote]);
+    if (!fromToken && !toToken) return;
+
+    const interval = setInterval(() => {
+      if (fromToken) {
+        getTokenPriceUSD(fromToken.address, fromToken.decimals).then(setFromPriceUsd);
+      }
+      if (toToken) {
+        getTokenPriceUSD(toToken.address, toToken.decimals).then(setToPriceUsd);
+      }
+    }, 10000); // Update every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [fromToken, toToken]);
 
   const handleSwapTokens = () => {
     const tempToken = fromToken;
     const tempAmount = fromAmount;
+    const tempPrice = fromPriceUsd;
+    
     setFromToken(toToken);
     setToToken(tempToken);
     setFromAmount(toAmount);
     setToAmount(tempAmount);
+    setFromPriceUsd(toPriceUsd);
+    setToPriceUsd(tempPrice);
   };
 
   const handleSwap = async () => {
@@ -184,53 +212,21 @@ export default function Home() {
     fromToken &&
     toToken &&
     parseFloat(fromAmount) > 0 &&
-    quote !== null &&
     !isSwapping;
 
   return (
-    <div
-      className="section-wrapper"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '140px 18px 100px',
-        minHeight: 'calc(100dvh)',
-        gap: '14px',
-      }}
-    >
+    <div className="section-wrapper">
       <div
         className="glass-card card-entrance"
         style={{
-          width: '100%',
+          width: '90%',
           maxWidth: 'var(--container-max)',
         }}
         data-testid="card-swap"
       >
         <h1 className="dex-heading" data-testid="text-heading">
-          NOLA Swap
+          NOLA Exchange
         </h1>
-
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '12px',
-            gap: '10px',
-          }}
-        >
-          <SlippageControl value={slippage} onChange={setSlippage} />
-          <button
-            className="quick-cta"
-            disabled={!canSwap}
-            onClick={handleSwap}
-            data-testid="button-quick-swap"
-          >
-            {isSwapping ? <span className="btn-spinner" /> : 'Quick Swap'}
-          </button>
-        </div>
 
         <TokenInput
           side="from"
@@ -255,7 +251,7 @@ export default function Home() {
             aria-label="Swap tokens"
             data-testid="button-swap-direction"
           >
-            ↕
+            ⇅
           </div>
         </div>
 
@@ -269,21 +265,70 @@ export default function Home() {
           isEstimate
         />
 
-        {isQuoting && (
-          <div
-            style={{
-              textAlign: 'center',
-              marginTop: '12px',
-              opacity: 0.7,
-              fontSize: '14px',
-            }}
-            data-testid="text-quoting"
-          >
-            Fetching best price...
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: '14px',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              className="swap-outside"
+              onClick={handleSwapTokens}
+              role="button"
+              aria-label="Swap From ↔ To"
+              data-testid="button-swap-tokens"
+              style={{ display: 'none' }}
+            >
+              ⇅
+            </div>
           </div>
-        )}
 
-        {quote && !isQuoting && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <SlippageControl value={slippage} onChange={setSlippage} />
+          </div>
+        </div>
+
+        <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'center' }}>
+          <button
+            className="glassy-btn"
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              background: canSwap
+                ? 'linear-gradient(90deg, var(--accent-1), var(--accent-2))'
+                : undefined,
+            }}
+            disabled={!canSwap}
+            onClick={handleSwap}
+            data-testid="button-swap-main"
+          >
+            {isSwapping ? (
+              <>
+                <span className="btn-spinner" />
+                <span>Swapping...</span>
+              </>
+            ) : !isConnected ? (
+              'Connect Wallet to Swap'
+            ) : chainId !== config.chainId ? (
+              'Switch to Polygon'
+            ) : !fromToken || !toToken ? (
+              'Select Tokens'
+            ) : !fromAmount || parseFloat(fromAmount) <= 0 ? (
+              'Enter Amount'
+            ) : (
+              <>
+                <span className="icon">⇄</span>
+                <span className="label">Swap</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {quote && (
           <div
             style={{
               textAlign: 'center',
@@ -296,40 +341,6 @@ export default function Home() {
             Best price via {quote.source === '0x' ? '0x Protocol' : '1inch'}
           </div>
         )}
-
-        <button
-          className="glassy-btn"
-          style={{
-            width: '100%',
-            marginTop: '16px',
-            justifyContent: 'center',
-            background: canSwap
-              ? 'linear-gradient(90deg, var(--accent-1), var(--accent-2))'
-              : undefined,
-          }}
-          disabled={!canSwap}
-          onClick={handleSwap}
-          data-testid="button-swap-main"
-        >
-          {isSwapping ? (
-            <>
-              <span className="btn-spinner" />
-              <span>Swapping...</span>
-            </>
-          ) : !isConnected ? (
-            'Connect Wallet to Swap'
-          ) : chainId !== config.chainId ? (
-            'Switch to Polygon'
-          ) : !fromToken || !toToken ? (
-            'Select Tokens'
-          ) : !fromAmount || parseFloat(fromAmount) <= 0 ? (
-            'Enter Amount'
-          ) : !quote ? (
-            'No Quote Available'
-          ) : (
-            'Swap'
-          )}
-        </button>
       </div>
     </div>
   );
