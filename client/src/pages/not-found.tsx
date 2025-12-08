@@ -1,21 +1,29 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle } from "lucide-react";
+import { Link } from 'wouter';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardContent className="pt-6">
-          <div className="flex mb-4 gap-2">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-            <h1 className="text-2xl font-bold text-gray-900">404 Page Not Found</h1>
-          </div>
-
-          <p className="mt-4 text-sm text-gray-600">
-            Did you forget to add the page to the router?
-          </p>
-        </CardContent>
-      </Card>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 'calc(100dvh)',
+        padding: '20px',
+        textAlign: 'center',
+      }}
+    >
+      <h1 style={{ fontSize: '72px', margin: '0', color: '#b445ff' }}>404</h1>
+      <p style={{ fontSize: '18px', opacity: 0.8, marginBottom: '24px' }}>
+        Page not found
+      </p>
+      <Link
+        href="/"
+        className="glassy-btn"
+        data-testid="link-back-home"
+      >
+        Back to NOLA
+      </Link>
     </div>
   );
 }
