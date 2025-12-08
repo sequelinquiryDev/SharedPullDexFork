@@ -1,0 +1,2487 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NOLA Exchange — Full (Enhanced)</title>
+<style>
+/* ===== RESET & THEME ===== */
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Arial',sans-serif}
+html,body{height:100%}
+body{
+  /* Disable page scrolling by default — suggestions & chat keep their own scroll */
+  overflow:hidden;
+  background:radial-gradient(circle at center,#0c0014,#1a002b 80%);
+  color:#fff;scroll-behavior:smooth;min-height:100vh;
+}
+:root{
+  --accent-1:#b445ff;--accent-2:#7013ff;
+  --glass:rgba(255,255,255,0.05);--glass-2:rgba(255,255,255,0.03);
+  --suggest-bg:rgba(25,0,50,0.98);
+  --shadow:0 0 25px rgba(180,0,255,0.3);
+  --container-max:520px;
+  --glass-btn-bg:rgba(255,255,255,0.03);
+  --glass-btn-border:rgba(255,255,255,0.06);
+  --yellow-cta:#ffcf33;
+  --toast-info-grad: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  --disabled-glass: rgba(255,255,255,0.02);
+  --focus-ring: 0 0 0 4px rgba(180,68,255,0.08);
+}
+
+/* NEBULA + PARTICLES */
+body::before{content:'';position:fixed;left:-50%;top:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(150,0,255,0.12),transparent 60%);animation:nebulaMove 35s infinite alternate ease-in-out;z-index:-2}
+@keyframes nebulaMove{0%{transform:translate(-10%,-10%)}100%{transform:translate(5%,5%)}}
+.particle{position:absolute;width:4px;height:3px;background:#b445ff;border-radius:50%;opacity:0.8;animation:floatParticle linear infinite;z-index:-1}
+@keyframes floatParticle{0%{transform:translateY(0) translateX(0);opacity:0.8}50%{transform:translateY(-50px) translateX(20px);opacity:0.4}100%{transform:translateY(0) translateX(0);opacity:0.8}}
+
+/* TOP LOGO moved down to sit above section */
+.logo{
+  width:84px;height:auto;display:block;margin:0 auto;pointer-events:none;
+  animation:logoGlow 25s ease-in-out infinite alternate,logoRotate 45s linear infinite;
+  z-index:998;position:fixed;left:50%;top:8vh;transform:translateX(-50%);
+}
+@keyframes logoGlow{0%{filter:drop-shadow(0 0 12px #9c00ff)}50%{filter:drop-shadow(0 0 30px #d15fff)}100%{filter:drop-shadow(0 0 12px #9c00ff)}}
+@keyframes logoRotate{0%{transform:translateX(-50%) rotateY(0deg)}100%{transform:translateX(-50%) rotateY(360deg)}}
+
+/* SECTION WRAPPER - CENTER EVERYTHING */
+.section-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;   /* content stays at the top */
+  justify-content: center;
+  gap: 18px;
+  padding: 28px;
+
+  margin-top: 20vh;          /* move the whole section UP the page */
+  position: relative;
+  z-index: 1;
+}
+
+/* CARD */
+.container{width:90%;max-width:var(--container-max);margin:9px;background:var(--glass);border:1px solid rgba(255,255,255,0.08);border-radius:25px;padding:22px;backdrop-filter:blur(18px);box-shadow:var(--shadow);animation:cardIn 800ms ease;position:relative}
+@keyframes cardIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+h2{text-align:center;font-size:26px;font-weight:600;margin-bottom:14px;color:#e0b3ff;text-shadow:0 0 8px #b445ff}
+
+/* UNIFIED ROW - compact "thin bar" look */
+.input-box{margin-top:14px;padding:8px 10px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;gap:10px;position:relative;box-shadow:0 6px 16px rgba(150,0,255,0.04)}
+.input-box .left{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+
+/* chosen tokens: professional rounded-rectangle icons (not circular) */
+.token-icon{width:36px;height:36px;border-radius:8px;background:transparent;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;position:relative;border:1px solid rgba(255,255,255,0.05);z-index:5}
+.token-icon img{width:100%;height:100%;object-fit:cover;display:block;border-radius:8px;z-index:6}
+.token-chip{position:absolute;right:-8px;bottom:-8px;background:linear-gradient(90deg,var(--accent-1),var(--accent-2));padding:3px 7px;border-radius:999px;font-weight:800;font-size:10px;color:#fff;box-shadow:0 8px 22px rgba(180,68,255,0.12),inset 0 -3px 8px rgba(0,0,0,0.12);display:none;white-space:nowrap;transform:translate(6px,6px);z-index:7}
+.input-box.has-token .token-chip{display:inline-flex}
+
+/* token info (symbol + 24h change) - placed neatly next to icon */
+.token-symbol{display:none}
+.token-change{font-size:12px;opacity:0.95}
+
+/* SUGGESTIONS container (internal scroll only) */
+.suggestions{position:absolute;top:68px;left:12px;right:12px;background:var(--suggest-bg);border-radius:12px;padding:6px;max-height:240px;overflow:auto;display:none;z-index:220;box-shadow:0 10px 30px rgba(120,0,255,0.08)}
+.suggestion-item{display:flex;align-items:center;gap:10px;padding:8px;border-radius:10px;cursor:pointer;justify-content:space-between}
+.suggestion-item:hover{background:linear-gradient(90deg, rgba(180,68,255,0.06), rgba(112,19,255,0.04))}
+.suggestion-left{display:flex;align-items:center;gap:10px;min-width:0}
+.suggestion-left img{width:28px;height:28px;border-radius:50%;object-fit:cover}
+.suggestion-main{display:flex;flex-direction:column;min-width:0}
+.suggestion-symbol{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.suggestion-name{font-size:12px;opacity:0.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.suggestion-price-pill{min-width:70px;text-align:right;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.03);font-weight:700;font-size:12px}
+
+/* INPUT BLOCK (single visible text input per row) */
+.input-field{display:flex;flex-direction:column;min-width:0;width:100%}
+.input-field input[type="text"]{padding:8px 10px;border-radius:8px;border:none;background:transparent;color:#fff;width:100%;outline:none;font-size:14px}
+.input-amount{margin-left:8px;min-width:120px}
+.input-amount input{width:100%;padding:8px 10px;border-radius:8px;border:none;background:rgba(255,255,255,0.03);color:#fff;font-size:14px;outline:none}
+
+/* small price area under amount/estimate - align to right without covering icons */
+.price-small{display:flex;flex-direction:column;align-items:flex-end;margin-left:auto;margin-top:6px;min-width:120px;z-index:2}
+.price-small .price-usd{font-size:12px;opacity:0.85}
+.price-small .price-unit{font-size:12px;opacity:0.65}
+
+/* SWAP CONTROLS */
+.controls{margin-top:14px;display:flex;align-items:center;gap:12px;justify-content:space-between}
+.swap-outside{
+  width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.06);box-shadow:0 8px 20px rgba(120,0,255,0.06);cursor:pointer;font-size:20px;color:#fff;transition:transform 120ms ease;backdrop-filter:blur(6px)}
+.swap-outside:active{transform:translateY(1px);box-shadow:none}
+
+/* custom slippage dropdown */
+.slippage-wrap{position:relative;display:inline-block}
+.slippage-display{
+  padding:8px 12px;border-radius:10px;background:var(--glass);color:#fff;border:0;font-weight:800;font-size:13px;box-shadow:0 8px 22px rgba(106,0,255,0.12);cursor:pointer;display:flex;align-items:center;gap:8px;
+}
+.slippage-list{position:absolute;right:0;top:calc(100% + 8px);background:var(--glass);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:6px;box-shadow:var(--shadow);min-width:120px;display:none;z-index:400}
+.slippage-item{padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:700;white-space:nowrap}
+.slippage-item:hover{background:linear-gradient(90deg, rgba(180,68,255,0.06), rgba(112,19,255,0.04))}
+
+/* GLASSY BUTTON (replaces electric pill) */
+.glassy-btn{
+  display:inline-flex; align-items:center; gap:10px; padding:10px 20px; border-radius:12px;
+  background:var(--glass-btn-bg); border:1px solid var(--glass-btn-border);
+  color:#fff; font-weight:800; font-size:15px; cursor:pointer;
+  transition:transform 120ms ease,box-shadow 120ms ease,background 120ms ease; backdrop-filter: blur(6px);
+}
+.glassy-btn:active{transform:translateY(1px);box-shadow:none}
+.glassy-btn[disabled]{opacity:0.45;cursor:not-allowed;box-shadow:none;border:1px solid rgba(255,255,255,0.02);background:var(--disabled-glass)}
+.glassy-btn.connected{background:linear-gradient(90deg,var(--accent-1),var(--accent-2));color:#fff;}
+
+/* center main swap button */
+.swap-row{margin-top:14px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+
+/* yellow quick-swap CTA */
+.quick-cta{
+  background: linear-gradient(90deg,var(--yellow-cta),#f7b400);
+  color:#1b1b1b; padding:10px 16px; border-radius:12px; border:none; font-weight:900; cursor:pointer;
+  display:inline-flex; gap:8px; align-items:center;
+  box-shadow: 0 10px 30px rgba(255,200,50,0.12);
+}
+.quick-cta:active{transform:translateY(1px);box-shadow:none}
+.quick-cta[disabled]{opacity:0.5;cursor:not-allowed}
+
+/* tiny glassy tooltip / toast */
+.toast{position:fixed;right:18px;bottom:90px;z-index:9999;padding:12px 18px;border-radius:12px;background:var(--toast-info-grad);backdrop-filter:blur(8px);box-shadow:0 10px 40px rgba(0,0,0,0.5);color:#fff;font-weight:700;max-width:360px}
+.toast a{color:#fff;font-weight:900;text-decoration:underline}
+
+/* TOP-RIGHT CONNECT */
+.top-right-connect{position:fixed;right:18px;top:18px;z-index:70;display:flex;gap:10px;align-items:center}
+.addr-chip{padding:8px 12px;border-radius:12px;background:rgba(255,255,255,0.03);font-weight:700;display:none}
+.connect-floating{background:linear-gradient(90deg,var(--glass-btn-bg),var(--glass-btn-bg));color:#fff;padding:10px 14px;border-radius:12px;border:1px solid var(--glass-btn-border);cursor:pointer;font-weight:800;box-shadow:0 10px 30px rgba(106,0,255,0.06);display:flex;align-items:center;gap:8px}
+
+/* footer */
+.footer{position:fixed;left:0;right:0;bottom:12px;display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;z-index:40;color:rgba(255,255,255,0.75);font-size:13px}
+.footer a{color:rgba(215,165,255,0.95);text-decoration:none;font-weight:700;margin-left:8px}
+
+/* small screen polish */
+@media(max-width:720px){
+  .section-wrapper{padding:18px;gap:12px;flex-direction:column-reverse}
+  .container{width:100%;max-width:520px}
+  .input-box .token-chip{font-size:10px;padding:3px 6px;right:-4px;bottom:-4px}
+  .logo{top:6vh;width:72px}
+}
+  
+/* Keep main container centered with its own scroll area if needed */
+.section-wrapper {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;   /* content stays at the top */
+  justify-content: center;
+  gap: 18px;
+  padding: 28px;
+
+  margin-top: 20vh;          /* move the whole section UP the page */
+  position: relative;
+  z-index: 1;
+}
+
+/* Allow suggestions and chat messages areas to scroll independently */
+.suggestions { max-height: 360px; overflow-y: auto; -webkit-overflow-scrolling:touch; }
+.chat-sidebar #chatMessages { overflow-y: auto; max-height: calc(100vh - 220px); -webkit-overflow-scrolling:touch; }
+
+/* Wallet pairing modal / app tiles (visual polish) */
+#walletPairModal .pair-app {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+  border-radius:10px;
+  padding:8px;
+  text-decoration:none;
+  color:#fff;
+  border:1px solid rgba(255,255,255,0.03);
+}
+#walletPairModal .pair-app-inner { display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px; }
+#walletPairModal .app-icon {
+  width:36px;height:36px;border-radius:8px;background:linear-gradient(180deg,#222,#111);display:flex;align-items:center;justify-content:center;font-weight:800;
+}
+#walletPairModal .app-label { font-size:12px; opacity:0.9; }
+/* CHAT TOGGLE BUTTON */
+.chat-toggle {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  background: #7A4988;
+  padding: 10px 14px;
+  border-radius: 20px;
+  cursor: pointer;
+  box-shadow: 0 0 15px rgba(180, 0, 255, 0.35);
+  z-index: 2000;
+  transition: 0.3s ease;
+}
+
+/* SLIDING CHAT PANEL */
+.chat-sidebar {
+  position: fixed;
+  right: -350px; /* hidden initially */
+  top: 20%;
+  width: 320px;
+  height: 60%;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(14px);
+  border-radius: 20px 0 0 20px;
+  padding: 15px;
+  box-shadow: 0 0 25px rgba(0,0,0,0.4);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  transition: right 0.35s ease;
+  z-index: 1999;
+}
+
+/* OPEN STATE */
+.chat-sidebar.open {
+  right: 20px;
+}
+
+/* MESSAGE BUBBLES */
+.chat-msg {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  font-size: 14px;
+  word-break: break-word;
+}
+
+/* INPUT AREA */
+.chat-input {
+  display: flex;
+  margin-top: auto;
+}
+
+.chat-input input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: none;
+  background: rgba(255,255,255,0.05);
+  color: white;
+}
+
+.chat-input button {
+  margin-left: 6px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: none;
+  background: #7A4988;
+  color: white;
+  cursor: pointer;
+}
+
+/* USERNAME MODAL */
+#usernameModal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  backdrop-filter: blur(10px);
+  background: rgba(0,0,0,0.6);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 3000;
+}
+
+#usernameModal .modal-content {
+  background: rgba(255,255,255,0.07);
+  padding: 25px;
+  border-radius: 20px;
+  text-align: center;
+  width: 300px;
+}
+
+#usernameModal input {
+  width: 85%;
+  padding: 10px;
+  border-radius: 12px;
+  border: none;
+  margin-top: 12px;
+  background: rgba(255,255,255,0.06);
+  color: white;
+}
+
+#usernameModal button {
+  margin-top: 15px;
+  padding: 10px 20px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg,#b445ff,#7013ff);
+  cursor: pointer;
+  color: white;
+}
+
+/* spinner */
+.btn-spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);border-top-color:rgba(255,255,255,1);animation:spin 700ms linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+  /* ====== Button press & tap fixes (drop-in — paste AFTER your existing button CSS) ====== */
+
+/* Target your main interactive elements explicitly so nothing else changes */
+button,
+button[class],
+.glassy-btn,
+.quick-cta,
+.connect-floating,
+.swap-outside,
+.chat-toggle,
+.slippage-display,
+.slippage-item,
+input[type="button"],
+input[type="submit"],
+a.button,
+a.btn {
+  -webkit-tap-highlight-color: transparent; /* remove blue flash on Android */
+  outline: none !important;                 /* no default outline */
+  -webkit-focus-ring-color: transparent;    /* suppress iOS/old Chrome focus ring */
+  -webkit-appearance: none;                 /* normalize across browsers */
+  touch-action: manipulation;               /* avoid delay/gesture interference */
+  user-select: none;                        /* avoid accidental text selection while pressing */
+  transition: transform 120ms cubic-bezier(.2,.9,.2,1), box-shadow 120ms ease, opacity 120ms ease;
+  will-change: transform, box-shadow;
+}
+
+/* Remove inner highlight on iOS Safari for links acting like buttons */
+a.button, a.btn { -webkit-tap-highlight-color: transparent; }
+
+/* Pressed state: subtle downward motion + tiny scale, with shadow reduction — "pure press" feel */
+button:active,
+.glassy-btn:active,
+.quick-cta:active,
+.connect-floating:active,
+.swap-outside:active,
+.chat-toggle:active,
+.slippage-display:active,
+.slippage-item:active {
+  transform: translateY(1px) scale(0.996);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.35) !important; /* slightly reduced shadow */
+  opacity: 0.995;
+  transition: transform 80ms cubic-bezier(.05,.6,.2,1), box-shadow 80ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Keep keyboard focus visible and accessible, but subtle & theme-matching */
+button:focus-visible,
+.glassy-btn:focus-visible,
+.quick-cta:focus-visible,
+.connect-floating:focus-visible,
+.swap-outside:focus-visible,
+.chat-toggle:focus-visible,
+.slippage-display:focus-visible,
+.slippage-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 6px rgba(180,68,255,0.08), 0 10px 30px rgba(106,0,255,0.06);
+  border-radius: 12px; /* ensure the ring matches button shape */
+}
+
+/* Prevent the huge default dotted outline on some browsers when clicked with mouse */
+button::-moz-focus-inner { border: 0; }
+
+/* Optional: for elements that use -webkit-user-select or other vendor props, ensure no text selection while pressing */
+button:active, .glassy-btn:active, .quick-cta:active { -webkit-user-select: none; -ms-user-select: none; user-select: none; }
+
+/* If you have any elements that still flash a background on tap (some Android skins),
+   add this as last-resort guard:
+*/
+* { -webkit-tap-highlight-color: transparent !important; }
+</style>
+</head>
+<body>
+
+<!-- particles -->
+<img id="logoFloat" class="logo" src="logo.gif" alt="NOLA Logo">
+
+<!-- top-right connect -->
+<div class="top-right-connect">
+  <div id="addrChip" class="addr-chip" aria-hidden="true"></div>
+  <button id="connectFloating" class="connect-floating glassy-btn" title="Connect Wallet" aria-haspopup="dialog" aria-controls="walletModal">
+    <span id="connectIcon" style="margin-right:8px">🔌</span>
+    <span id="connectLabel">Connect Wallet</span>
+  </button>
+</div>
+
+<!-- SECTION WRAPPER centers card and swap control -->
+<div class="section-wrapper">
+  <div class="container" role="main" aria-label="NOLA Exchange">
+    <h2>NOLA Exchange</h2>
+
+    <!-- FROM -->
+    <div class="input-box" id="fromBox" style="position:relative;">
+      <div class="left">
+        <div class="token-icon" id="fromIcon">
+          <img id="fromLogo" src="" alt="" style="display:none">
+          <span class="token-chip" id="fromChip" style="display:none"></span>
+        </div>
+
+        <div class="token-info">
+          <div class="token-symbol" id="fromSymbol">Select</div>
+          <div class="token-change" id="fromChange" style="display:none">+0.00%</div>
+        </div>
+
+        <div class="input-field">
+          <input id="fromToken" placeholder="symbol" style="padding:10px 12px;border-radius:8px;border:none;background:transparent;color:#fff;width:100%">
+        </div>
+
+        <div class="input-amount" style="min-width:120px;">
+          <input id="fromAmount" placeholder="Amount" type="number" step="any" min="0">
+        </div>
+
+        <div class="price-small">
+          <div id="fromUsdSmall" class="price-usd" style="display:none">≈ $—</div>
+          <div id="fromUnitSmall" class="price-unit" style="display:none">— / unit</div>
+        </div>
+
+      </div>
+      <div class="suggestions" id="fromSuggestions" data-side="from" tabindex="-1"></div>
+    </div>
+
+    <!-- TO -->
+    <div class="input-box" id="toBox" style="position:relative;margin-top:12px;">
+      <div class="left">
+        <div class="token-icon" id="toIcon">
+          <img id="toLogo" src="" alt="" style="display:none">
+          <span class="token-chip" id="toChip" style="display:none"></span>
+        </div>
+
+        <div class="token-info">
+          <div class="token-symbol" id="toSymbol">Select</div>
+          <div class="token-change" id="toChange" style="display:none">+0.00%</div>
+        </div>
+
+        <div class="input-field">
+          <input id="toToken" placeholder="symbol" style="padding:10px 12px;border-radius:8px;border:none;background:transparent;color:#fff;width:100%">
+        </div>
+
+        <div class="input-amount" style="min-width:120px;">
+          <input id="toAmount" placeholder="Estimate" readonly>
+        </div>
+
+        <div class="price-small">
+          <div id="toUsdSmall" class="price-usd" style="display:none">≈ $—</div>
+          <div id="toUnitSmall" class="price-unit" style="display:none">— / unit</div>
+        </div>
+
+      </div>
+      <div class="suggestions" id="toSuggestions" data-side="to" tabindex="-1"></div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls" style="margin-top:14px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div id="swapOutside" class="swap-outside" title="Swap From ↔ To">⇅</div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;">
+        <!-- custom slippage -->
+        <div class="slippage-wrap" id="slippageWrap" aria-label="Slippage">
+          <div id="slippageDisplay" class="slippage-display" role="button" aria-haspopup="listbox" aria-expanded="false">
+            <span id="slippageLabel">1%</span>
+          </div>
+          <div id="slippageList" class="slippage-list" role="listbox" tabindex="-1">
+            <div class="slippage-item" data-value="0.5">0.5%</div>
+            <div class="slippage-item" data-value="1">1%</div>
+            <div class="slippage-item" data-value="2">2%</div>
+            <div class="slippage-item" data-value="3">3%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="swap-row" style="margin-top:8px;">
+      <!-- main swap button (centered) -->
+      <button id="swapBtn" class="glassy-btn" title="Swap">
+        <span class="icon">⇄</span>
+        <span class="label">Swap</span>
+        <span id="swapSpinner" style="margin-left:8px;display:none" class="btn-spinner"></span>
+      </button>
+    </div>
+
+    <!-- quick swap placed visually under slippage (still within same container) -->
+    <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+      <button id="quickSwapBtn" class="quick-cta" title="Quick Swap (uses cached quote)">
+    
+        <span id="quickLabel">Quick Swap</span>
+        <span id="quickSpinner" style="display:none" class="btn-spinner"></span>
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- toast container -->
+<div id="toastRoot" style="pointer-events:none;position:fixed;right:18px;bottom:90px;z-index:9999"></div>
+  
+<!-- CHAT TOGGLE BUTTON -->
+<div class="chat-toggle" id="chatToggle">Public Chat🔘</div>
+
+<!-- CHAT PANEL -->
+<div class="chat-sidebar" id="chatSidebar">
+
+  <h3 style="text-align:center;margin-bottom:10px;">Chat</h3>
+
+  <div id="chatMessages" style="overflow-y:auto; flex:1;"></div>
+
+  <div class="chat-input">
+    <input id="chatInput" placeholder="Drop your alpha...">
+    <button id="sendChat">NOLA</button>
+  </div>
+
+</div>
+
+<!-- USERNAME POPUP -->
+<div id="usernameModal">
+  <div class="modal-content">
+    <h3>Choose a Username</h3>
+    <input id="modalUsername" placeholder="Enter name">
+    <button id="confirmUsername">Say NOLA</button>
+  </div>
+</div>
+<!-- footer -->
+<div class="footer">
+  <div>© 2025 NOLA — All rights reserved</div>
+  <div><a href="terms&privacy.html" id="privacyTerms">Terms&Privacy</a> • <a href="https://x.com/NOLA_CHAIN" id="xLink">X</a> <a href="https:https://t.me/NOLA_community" id="tgLink">Telegram</a> <a href="index.html" id="siteLink">Website</a></div>
+</div>
+
+<!-- LIBS -->
+<script src="https://cdn.jsdelivr.net/npm/ethers/dist/ethers.min.js"></script>
+<!-- try to include the latest Web3Modal v3 and WalletConnect v2 script if present (developer will swap versions if different) -->
+<script src="https://unpkg.com/@web3modal/html@2.1.1/dist/index.js"></script>
+  <!-- chat -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script>
+/* ====== CONFIG ====== */
+const SUPABASE_URL = "https://qnpeauoskuipzcoaqbpy.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFucGVhdW9za3VpcHpjb2FxYnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0MDU2MjksImV4cCI6MjA3OTk4MTYyOX0.zduOSQAt7FALN61IIEZiQDEcJjHu7vZ2STufC5laDcg";
+
+/* ====== INIT CLIENT ====== */
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ====== ELEMENTS ====== */
+const chatSidebar = document.getElementById("chatSidebar");
+const chatToggle   = document.getElementById("chatToggle");
+const chatMessages = document.getElementById("chatMessages");
+const chatInput    = document.getElementById("chatInput");
+const sendChatBtn  = document.getElementById("sendChat");
+
+const usernameModal = document.getElementById("usernameModal");
+const modalUsername = document.getElementById("modalUsername");
+const confirmUsername = document.getElementById("confirmUsername");
+
+/* ====== STATE ====== */
+let chatUser = localStorage.getItem("chatUser") || null;
+let renderedIds = new Set(); 
+let lastId = 0; // track highest id rendered
+
+/* ====== UI: show modal if username missing ====== */
+if(!chatUser){
+  usernameModal.style.display = "flex";
+} else if(modalUsername) {
+  modalUsername.value = chatUser;
+}
+
+/* ====== username logic ====== */
+confirmUsername && (confirmUsername.onclick = async () => {
+  const v = (modalUsername.value || '').trim();
+  chatUser = v || ('User' + Math.floor(Math.random()*9999));
+  localStorage.setItem('chatUser', chatUser);
+  usernameModal.style.display = 'none';
+  await initChat();
+});
+
+/* if username already exists */
+if(chatUser){
+  initChat();
+}
+
+/* ====== Help: color only usernames ====== */
+const userColors = {};
+function getColor(name){
+  if(userColors[name]) return userColors[name];
+  const r = Math.floor(100 + Math.random()*120);
+  const g = Math.floor(50 + Math.random()*140);
+  const b = Math.floor(100 + Math.random()*120);
+  const col = `rgb(${r},${g},${b})`;
+  userColors[name] = col;
+  return col;
+}
+
+/* ====== Render message safely ====== */
+function escapeHtml(s){
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+
+function renderMessage(msg){
+  if(!msg || !msg.id) return;
+  if(renderedIds.has(String(msg.id))) return; 
+  renderedIds.add(String(msg.id));
+
+  const numericId = Number(msg.id);
+  if(!Number.isNaN(numericId) && numericId > lastId) lastId = numericId;
+
+  const el = document.createElement('div');
+  el.className = 'chat-msg';
+
+  const userEsc = escapeHtml(msg.user || 'Anon');
+  const textEsc = escapeHtml(msg.text || '');
+  const time = msg.created_at ? new Date(msg.created_at).toLocaleTimeString() : '';
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <b style="color:${getColor(userEsc)};font-weight:800">${userEsc}</b>
+      <span style="font-size:11px;color:rgba(255,255,255,0.5);margin-left:auto">${time}</span>
+    </div>
+    <div style="margin-top:6px;white-space:pre-wrap">${textEsc}</div>
+  `;
+
+  chatMessages.appendChild(el);
+
+  while(chatMessages.children.length > 500){
+    chatMessages.removeChild(chatMessages.firstChild);
+  }
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function showPlaceholder(){
+  chatMessages.innerHTML = `<div style="opacity:0.7;text-align:center;margin-top:20px">No messages yet — be first!</div>`;
+}
+
+/* ====== Load history ====== */
+async function loadHistory(){
+  try{
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('id, user, text, created_at')
+      .order('id', { ascending: true })
+      .limit(200);
+
+    if(error){
+      console.error('History load error', error);
+      chatMessages.innerHTML = `<div style="color:#f88;text-align:center">Failed to load chat history</div>`;
+      return;
+    }
+
+    renderedIds.clear();
+    chatMessages.innerHTML = '';
+    if(!data || !data.length){
+      showPlaceholder();
+      lastId = 0;
+      return;
+    }
+
+    data.forEach(renderMessage);
+  }catch(err){
+    console.error('loadHistory exception', err);
+    chatMessages.innerHTML = `<div style="color:#f88;text-align:center">Chat unavailable</div>`;
+  }
+}
+
+/* ====== Polling: fetch new messages every 1.5s ====== */
+async function fetchNewMessages() {
+    try {
+        const { data, error } = await supabase
+            .from('chat_messages')
+            .select('id, user, text, created_at')
+            .gt('id', lastId)
+            .order('id', { ascending: true });
+
+        if(error){
+            console.error('Fetch new messages error:', error);
+            return;
+        }
+
+        if(data && data.length){
+            data.forEach(renderMessage);
+        }
+    } catch (e) {
+        console.error('fetchNewMessages exception:', e);
+    }
+}
+setInterval(fetchNewMessages, 600);
+
+/* ====== Send message ====== */
+/* ====== Send message (robust: always clears and focuses) ====== */
+let sending = false;
+sendChatBtn.addEventListener('click', async () => {
+  const text = (chatInput.value || '').trim();
+  if (!text) { chatInput.focus(); return; }
+  if (!chatUser) {
+    usernameModal.style.display = 'flex';
+    return;
+  }
+  if (sending) return;
+  sending = true;
+  sendChatBtn.disabled = true;
+
+  try {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .insert({ user: chatUser, text });
+
+    if (error) {
+      console.error('Insert error', error);
+      showToast('Send failed. Check console.', { type: 'error' });
+    } else if (data && data[0]) {
+      // local echo
+      renderMessage(data[0]);
+    }
+    // Clear and focus regardless of success so user can continue typing
+    chatInput.value = '';
+    chatInput.focus();
+  } catch (e) {
+    console.error('Send exception', e);
+    showToast('Send failed', { type: 'error' });
+    // still clear the input so the user can retry
+    chatInput.value = '';
+    chatInput.focus();
+  } finally {
+    sending = false;
+    sendChatBtn.disabled = false;
+  }
+});
+
+/* ====== Send on Enter ====== */
+chatInput.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter' && !e.shiftKey){
+    e.preventDefault();
+    sendChatBtn.click();
+  }
+});
+
+/* ====== Toggle chat sidebar ====== */
+chatToggle && chatToggle.addEventListener('click', () => {
+  chatSidebar.classList.toggle('open');
+});
+
+/* ====== Open chat when user taps main area (per your request) ====== */
+document.querySelectorAll('.section-wrapper, .container').forEach(el=>{
+  el.addEventListener('click', (e) => {
+    // if click was inside suggestions or inputs, don't auto-open
+    const insideSuggestion = !!e.target.closest('.suggestions');
+    const insideInput = !!e.target.closest('input, button, .glassy-btn, .quick-cta');
+    if (insideSuggestion || insideInput) return;
+    chatSidebar.classList.remove('open');
+  });
+});
+
+/* ====== Init chat ====== */ 
+async function initChat(){
+  await loadHistory();
+}
+</script>
+<script>
+  /* ================= PARTICLES */
+(function createParticles(){ for(let i=0;i<60;i++){ const p=document.createElement('div'); p.className='particle'; p.style.top=(Math.random()*100)+'%'; p.style.left=(Math.random()*100)+'%'; p.style.width=(Math.random()*3+1)+'px'; p.style.height=(Math.random()*3+1)+'px'; p.style.animationDuration=(Math.random()*10+5)+'s'; document.body.appendChild(p); }})();
+
+/* =================== CONFIG & STATE =================== */
+const CHAIN_ID = 137;
+const CHAIN_ID_HEX = '0x89';
+const ONEINCH_BASE = `https://api.1inch.io/v5.0/${CHAIN_ID}`;
+const ZEROX_BASE = 'https://polygon.api.0x.org';
+const COINGECKO_CHAIN = 'polygon-pos';
+const FALLBACK_RPCS = [
+  "https://polygon-rpc.com",
+   "https://rpc-mainnet.maticvigil.com",
+];
+const USDC_ADDR = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174';
+const WETH_ADDR = '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619';
+const MATIC_ADDR = '0x0000000000000000000000000000000000001010';
+const ZEROX_API_KEY = '099490ac-79a1-4416-a088-df38b6e0c384'; // keep as-is
+const WALLETCONNECT_PROJECT_ID = '6557a92e3698182727669d41cbeb95a1';
+const FEE_PERCENT = 0.00001;
+const FEE_RECIPIENT = '0xFEE_RECIPIENT_PLACEHOLDER';
+const QUOTE_CACHE_TTL = 10_000; // 10s
+
+let tokenList = [];
+let tokenMap = new Map();
+let cgStatsMap = new Map();
+const priceCache = new Map();
+const suggestionCache = new Map();
+const quoteCache = new Map();
+const ACTIVE_PRICE_ADDRS = new Set();
+
+/* UI refs */
+const $ = id => document.getElementById(id);
+const fromTokenInput = $('fromToken'), toTokenInput = $('toToken');
+const fromAmountEl = $('fromAmount'), toAmountEl = $('toAmount');
+const fromUsdSmall = $('fromUsdSmall'), toUsdSmall = $('toUsdSmall');
+const fromUnitSmall = $('fromUnitSmall'), toUnitSmall = $('toUnitSmall');
+const fromLogo = $('fromLogo'), toLogo = $('toLogo');
+const fromChip = $('fromChip'), toChip = $('toChip');
+const fromSuggestions = $('fromSuggestions'), toSuggestions = $('toSuggestions');
+const swapOutside = $('swapOutside'), swapBtn = $('swapBtn'), swapSpinner = $('swapSpinner');
+const fromBox = $('fromBox'), toBox = $('toBox');
+const connectFloating = $('connectFloating'), addrChip = $('addrChip'), connectLabel = $('connectLabel'), connectIcon = $('connectIcon');
+const slippageWrap = $('slippageWrap'), slippageDisplay = $('slippageDisplay'), slippageList = $('slippageList'), slippageLabel = $('slippageLabel');
+const fromChangeEl = $('fromChange'), toChangeEl = $('toChange');
+const quickSwapBtn = $('quickSwapBtn'), quickSpinner = $('quickSpinner'), quickLabel = $('quickLabel');
+
+let provider = null, signer = null, userAddress = null, web3modal = null;
+
+/* =================== HELPERS =================== */
+const isAddress = v => /^0x[a-fA-F0-9]{40}$/.test((v||'').trim());
+const low = s => (s||'').toLowerCase();
+const nowTs = ()=> Date.now();
+function formatUSD(v){ if (v===null||v===undefined||!Number.isFinite(v)) return '—'; const n=Number(v); const opts={style:'currency',currency:'USD',maximumFractionDigits:2,minimumFractionDigits:2}; if(Math.abs(n)>0&&Math.abs(n)<0.01){opts.maximumFractionDigits=6;opts.minimumFractionDigits=4;} return new Intl.NumberFormat('en-US',opts).format(n); }
+function fetchWithTimeout(url,opts={},ms=5000){ const controller=new AbortController(); const id=setTimeout(()=>controller.abort(),ms); const init=Object.assign({},opts,{signal:controller.signal}); return fetch(url,init).finally(()=>clearTimeout(id)); }
+function explorerTxLink(tx){ return `https://polygonscan.com/tx/${tx}`; }
+
+/* single-themed toast queue (keep one at a time) */
+let _toastQueue = [];
+let _toastVisible = false;
+function showToast(msg, opts = {}) {
+  opts = Object.assign({ttl:4000, type:'info'}, opts);
+  _toastQueue.push({msg, opts});
+  if (!_toastVisible) _processToastQueue();
+}
+function _processToastQueue(){
+  if (_toastQueue.length === 0) { _toastVisible = false; return; }
+  _toastVisible = true;
+  const item = _toastQueue.shift();
+  const root = $('toastRoot');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.style.pointerEvents = 'auto';
+  el.innerHTML = `<div style="display:flex;gap:10px;align-items:center">
+    <div style="flex:1">${item.msg}</div>
+    ${item.opts.txHash ? `<div style="font-size:12px;margin-left:8px"><a href="${explorerTxLink(item.opts.txHash)}" target="_blank" rel="noopener">View</a></div>` : ''}
+  </div>`;
+  root.appendChild(el);
+  el.style.opacity = '0';
+  requestAnimationFrame(()=>{ el.style.transition = 'opacity 180ms ease, transform 180ms ease'; el.style.opacity = '1'; el.style.transform = 'translateY(0)'; });
+  setTimeout(()=> {
+    el.style.transition = 'opacity 220ms'; el.style.opacity = '0';
+    setTimeout(()=>{ el.remove(); _processToastQueue(); }, 260);
+  }, item.opts.ttl);
+}
+
+/* spinner + busy helper */
+function setBusy(el, busy = true, label) {
+  if (!el) return;
+  if (busy) {
+    el.setAttribute('disabled', 'true');
+    const spinner = el.querySelector('.btn-spinner') || el.parentElement.querySelector('.btn-spinner');
+    if (spinner) spinner.style.display = 'inline-block';
+    if (label) { const lbl = el.querySelector('.label') || el.querySelector('span'); if (lbl) lbl.textContent = label; }
+  } else {
+    el.removeAttribute('disabled');
+    const spinner = el.querySelector('.btn-spinner') || el.parentElement.querySelector('.btn-spinner');
+    if (spinner) spinner.style.display = 'none';
+  }
+}
+
+/* prevent/allow body scroll while suggestions open */
+let _bodyScrollLocked = false;
+function stopBodyScroll(){
+  if (_bodyScrollLocked) return;
+  _bodyScrollLocked = true;
+  // enforce hidden page scroll
+  document.documentElement.style.overflow = 'hidden';
+  document.body.style.overflow = 'hidden';
+}
+function restoreBodyScroll(){
+  if (!_bodyScrollLocked) return;
+  _bodyScrollLocked = false;
+  document.documentElement.style.overflow = '';
+  document.body.style.overflow = '';
+}
+
+/* RPC provider fallback chooser */
+async function getRpcProvider(){
+  for (const url of FALLBACK_RPCS){
+    try {
+      const p = new ethers.providers.JsonRpcProvider(url);
+      const net = await p.getNetwork();
+      if (net && net.chainId === CHAIN_ID) return p;
+    } catch(e){}
+  }
+  return new ethers.providers.JsonRpcProvider(FALLBACK_RPCS[0]);
+}
+
+/* =================== LOAD TOKENS & COINGECKO MARKETS =================== */
+async function loadTokensAndMarkets(){
+try {
+const r = await fetch('https://tokens.coingecko.com/polygon-pos/all.json');
+const j = await r.json();
+tokenList = (j.tokens||[]).map(t => ({ address: low(t.address), symbol: t.symbol||'', name: t.name||'', decimals: t.decimals||18, logoURI: t.logoURI||t.logo||'' }));
+tokenList.forEach(t => tokenMap.set(t.address, t));
+if (!tokenMap.has(low(MATIC_ADDR))) tokenMap.set(low(MATIC_ADDR), { address: low(MATIC_ADDR), symbol:'MATIC', name:'Polygon', decimals:18, logoURI: '' });
+
+try {  
+  const marketsUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=volume_desc&per_page=250&page=1&sparkline=false&price_change_percentage=24h`;  
+  const rm = await fetchWithTimeout(marketsUrl, {}, 5000);  
+  const jm = await rm.json();  
+  jm.forEach(c => {  
+    const sym = low(c.symbol||''), name = low(c.name||'');  
+    const stat = { price: (typeof c.current_price === 'number' ? c.current_price : null), change: (typeof c.price_change_percentage_24h === 'number' ? c.price_change_percentage_24h : null), changePeriod:'24h', volume24h: (typeof c.total_volume === 'number' ? c.total_volume : 0), image: c.image||'', volume12h: null };  
+    if (sym) cgStatsMap.set(sym, stat);  
+    if (name) cgStatsMap.set(name, stat);  
+  });  
+} catch(e){ console.warn('CoinGecko markets failed', e); }  
+
+try {  
+  const r1 = await fetch(`${ONEINCH_BASE}/tokens`);  
+  const j1 = await r1.json();  
+  if (j1 && j1.tokens) {  
+    Object.values(j1.tokens).forEach(t => {  
+      const addr = low(t.address||'');  
+      if (!addr) return;  
+      if (tokenMap.has(addr)) return;  
+      const obj = { address: addr, symbol: t.symbol||'', name: t.name||'', decimals: t.decimals||18, logoURI: t.logoURI||'' };  
+      tokenList.push(obj); tokenMap.set(addr, obj);  
+    });  
+  }  
+} catch(e){ /* ignore */ }  
+
+const seen = new Set();  
+tokenList = tokenList.filter(t => { if(!t||!t.address) return false; if(seen.has(t.address)) return false; seen.add(t.address); return true; });  
+console.log('Loaded tokens:', tokenList.length);
+
+} catch(e){ console.error('loadTokensAndMarkets error', e); }
+}
+let tokensLoadedPromise = loadTokensAndMarkets();
+async function ensureTokensLoaded(){ if (!tokensLoadedPromise) tokensLoadedPromise = loadTokensAndMarkets(); await tokensLoadedPromise; }
+
+
+/* =================== PRICING SOURCES & SMART PRICE (unchanged core) =================== */
+/* ... (kept original price/quote functions) ... */
+/* For brevity, the same functions remain intact (fetch0xPrice, fetch1InchQuotePrice, fetchCoingeckoSimple, fetchDexscreenerPrice, derivePriceViaWeth, getTokenPriceUSD) */
+
+async function fetch0xPrice(addr){
+  try {
+    const sellToken = addr;
+    const buyToken = USDC_ADDR;
+    const resp = await fetchWithTimeout(`${ZEROX_BASE}/swap/v1/price?sellToken=${encodeURIComponent(sellToken)}&buyToken=${encodeURIComponent(buyToken)}&sellAmount=1`, { headers: { '0x-api-key': ZEROX_API_KEY } }, 3500);
+    if (!resp.ok) throw new Error('0x price fail');
+    const j = await resp.json();
+    if (j && j.price) return Number(j.price);
+    if (j && j.buyAmount) {
+      const val = Number(j.buyAmount);
+      if (Number.isFinite(val) && val > 0) return val;
+    }
+    return null;
+  } catch(e){ return null; }
+}
+async function fetch1InchQuotePrice(addr, decimals=18){
+  try {
+    const amountBN = ethers.BigNumber.from(10).pow(decimals);
+    const qUrl = `${ONEINCH_BASE}/quote?fromTokenAddress=${addr}&toTokenAddress=${USDC_ADDR}&amount=${amountBN.toString()}`;
+    const res = await fetchWithTimeout(qUrl,{},3000);
+    if (!res.ok) throw new Error('1inch non-ok');
+    const j = await res.json();
+    if (!j || !j.toTokenAmount) throw new Error('1inch no toTokenAmount');
+    const usdcAmountBN = ethers.BigNumber.from(j.toTokenAmount);
+    const usdc = Number(ethers.utils.formatUnits(usdcAmountBN, j.toToken?.decimals ?? 6));
+    if (!Number.isFinite(usdc) || usdc <= 0) throw new Error('1inch invalid price');
+    return usdc;
+  } catch(e){ return null; }
+}
+async function fetchCoingeckoSimple(addr){
+  try {
+    const url = `https://api.coingecko.com/api/v3/simple/token_price/${COINGECKO_CHAIN}?contract_addresses=${addr}&vs_currencies=usd`;
+    const res = await fetchWithTimeout(url, {}, 3000);
+    if (!res.ok) throw new Error('cg simple non-ok');
+    const j = await res.json();
+    const v = j[low(addr)]?.usd ?? null;
+    if (v && typeof v === 'number' && v > 0) return v;
+    return null;
+  } catch(e){ return null; }
+}
+async function fetchDexscreenerPrice(addr){
+  try {
+    const url = `https://api.dexscreener.com/latest/dex/tokens/${addr}`;
+    const res = await fetchWithTimeout(url,{},3000);
+    if (!res.ok) throw new Error('dexscreener non-ok');
+    const j = await res.json();
+    const pairs = j?.pairs || [];
+    for (const p of pairs){
+      if (p?.priceUsd){ const v = Number(p.priceUsd); if (Number.isFinite(v) && v>0) return v; }
+      if (p?.price){ const v = Number(p.price); if (Number.isFinite(v) && v>0) return v; }
+    }
+    return null;
+  } catch(e){ return null; }
+}
+async function derivePriceViaWeth(addr, decimals=18){
+  try {
+    const amountBN = ethers.BigNumber.from(10).pow(decimals);
+    const qUrl = `${ONEINCH_BASE}/quote?fromTokenAddress=${addr}&toTokenAddress=${WETH_ADDR}&amount=${amountBN.toString()}`;
+    const res = await fetchWithTimeout(qUrl,{},3000);
+    if (!res.ok) throw new Error('1inch->weth non-ok');
+    const j = await res.json();
+    if (!j || !j.toTokenAmount) throw new Error('1inch->weth no toTokenAmount');
+    const wethAmountBN = ethers.BigNumber.from(j.toTokenAmount);
+    const weth = Number(ethers.utils.formatUnits(wethAmountBN, j.toToken?.decimals ?? 18));
+    if (!Number.isFinite(weth) || weth <= 0) throw new Error('1inch->weth invalid');
+
+    const qUrl2 = `${ONEINCH_BASE}/quote?fromTokenAddress=${WETH_ADDR}&toTokenAddress=${USDC_ADDR}&amount=${ethers.utils.parseUnits(String(weth), 18).toString()}`;
+    const res2 = await fetchWithTimeout(qUrl2, {}, 3000);
+    if (!res2.ok) throw new Error('weth->usdc non-ok');
+    const j2 = await res2.json();
+    if (!j2 || !j2.toTokenAmount) throw new Error('weth->usdc no toTokenAmount');
+    const usdcAmountBN = ethers.BigNumber.from(j2.toTokenAmount);
+    const usdc = Number(ethers.utils.formatUnits(usdcAmountBN, j2.toToken?.decimals ?? 6));
+    if (!Number.isFinite(usdc) || usdc <= 0) throw new Error('weth->usdc invalid');
+
+    const price = usdc * weth;
+    if (!Number.isFinite(price) || price <= 0) throw new Error('derived invalid');
+    return price;
+  } catch(e){ return null; }
+}
+
+async function getTokenPriceUSD(address, decimals=18){
+  if (!address) return null;
+  const addr = low(address);
+  const cached = priceCache.get(addr);
+  if (cached && (nowTs() - cached.ts) < 10000) {
+    if (cached.price === null) return null;
+    return cached.price;
+  }
+
+  const sources = [
+    { name:'0x', fn: async ()=> await fetch0xPrice(addr), priority:1 },
+    { name:'1inch', fn: async ()=> await fetch1InchQuotePrice(addr, decimals), priority:2 },
+    { name:'coingecko_simple', fn: async ()=> await fetchCoingeckoSimple(addr), priority:3 },
+    { name:'dexscreener', fn: async ()=> await fetchDexscreenerPrice(addr), priority:4 },
+    { name:'derive_weth', fn: async ()=> await derivePriceViaWeth(addr, decimals), priority:5 }
+  ];
+
+  const TIME_WINDOW = 900;
+  let best = null;
+  const start = Date.now();
+  let completed = 0;
+  return await new Promise(resolve => {
+    let settled = false;
+    sources.forEach(s => {
+      (async ()=>{
+        try {
+          const val = await s.fn();
+          completed++;
+          if (val && Number.isFinite(val) && val > 0) {
+            const result = { source: s.name, price: Number(val), priority: s.priority, ts: Date.now() };
+            if (!best) best = result;
+            else {
+              if (result.priority < best.priority) best = result;
+              else if (result.priority === best.priority && result.ts < best.ts) best = result;
+            }
+            if (result.priority === 1) {
+              if (!settled){ settled = true; priceCache.set(addr, {price: result.price, ts: nowTs()}); resolve(result.price); }
+              return;
+            }
+            if (Date.now() - start > TIME_WINDOW || completed === sources.length) {
+              if (!settled){ settled = true; priceCache.set(addr, {price: best.price, ts: nowTs()}); resolve(best.price); }
+              return;
+            } else {
+              setTimeout(()=>{ if (!settled){ settled = true; priceCache.set(addr, {price: best.price, ts: nowTs()}); resolve(best.price); } }, TIME_WINDOW - (Date.now() - start));
+            }
+          } else {
+            if (completed === sources.length && !best && !settled) { settled = true; priceCache.set(addr, {price:null, ts: nowTs()}); resolve(null); }
+          }
+        } catch(e){
+          completed++;
+          if (completed === sources.length && !best && !settled) { settled = true; priceCache.set(addr, {price:null, ts: nowTs()}); resolve(null); }
+        }
+      })();
+    });
+
+    setTimeout(()=>{ if (!settled){ if (best){ priceCache.set(addr, {price:best.price, ts: nowTs()}); resolve(best.price); } else { priceCache.set(addr, {price:null, ts: nowTs()}); resolve(null); } } }, TIME_WINDOW + 1200);
+  });
+}
+
+/* =================== SUGGESTIONS & AUTOCOMPLETE (with scroll-lock) =================== */
+function makeSuggestionItem(tokenObj, stats, priceUSD){
+  const row = document.createElement('div'); row.className='suggestion-item';
+  const left = document.createElement('div'); left.className='suggestion-left';
+  const img = document.createElement('img'); img.src = tokenObj.logoURI || (stats && stats.image) || DARK_SVG_PLACEHOLDER; img.onerror = ()=> img.src = DARK_SVG_PLACEHOLDER;
+  img.style.width='28px'; img.style.height='28px'; img.style.borderRadius='50%';
+  left.appendChild(img);
+  const main = document.createElement('div'); main.className='suggestion-main';
+  const sym = document.createElement('div'); sym.className='suggestion-symbol'; sym.textContent = tokenObj.symbol || (tokenObj.address?tokenObj.address.slice(0,6):'');
+  const nm = document.createElement('div'); nm.className='suggestion-name'; nm.textContent = tokenObj.name || '';
+  main.appendChild(sym); main.appendChild(nm);
+  if (stats && (typeof stats.change === 'number' || typeof stats.change24h === 'number' || typeof stats.change !== 'undefined')) {
+    const changeVal = (typeof stats.change === 'number') ? stats.change : (typeof stats.change24h === 'number' ? stats.change24h : null);
+    const period = stats.changePeriod || (stats.change24h ? '24h' : '');
+    if (changeVal !== null && changeVal !== undefined) {
+      const ch = document.createElement('div'); ch.style.fontSize='11px'; ch.style.marginTop='6px'; ch.style.opacity='0.9';
+      ch.textContent = (changeVal>=0?'+':'')+changeVal.toFixed(2) + (period ? ` (${period})` : '');
+      ch.style.color = changeVal >= 0 ? '#9ef39e' : '#ff9e9e';
+      main.appendChild(ch);
+    }
+  }
+  left.appendChild(main);
+  row.appendChild(left);
+  const right = document.createElement('div'); right.className='suggestion-price-pill';
+  if (priceUSD != null && Number.isFinite(priceUSD)) right.textContent = formatUSD(priceUSD);
+  else right.textContent = '—';
+  row.appendChild(right);
+  return row;
+}
+function showDefaultList(side){
+  const box = (side === 'from') ? fromSuggestions : toSuggestions;
+  box.innerHTML = '';
+  const candidates = tokenList.filter(t => { const s = low(t.symbol), n = low(t.name); return cgStatsMap.has(s) || cgStatsMap.has(n); });
+  const withStats = candidates.map(t => { const s = low(t.symbol), n = low(t.name); const stat = cgStatsMap.get(s) || cgStatsMap.get(n) || {price:null,change:null,changePeriod:null,volume24h:0,image:''}; return {t,stat}; });
+  withStats.sort((a,b)=> (b.stat.volume24h||0) - (a.stat.volume24h||0));
+  const top = withStats.slice(0, Math.min(15, withStats.length));
+  (async ()=>{
+    // lock page scroll and attach safe handlers
+    stopBodyScroll();
+    attachSuggestionScrollSafety(box);
+    for (const e of top){
+      const tk = e.t, stats = e.stat;
+      const price = stats.price ?? await getTokenPriceUSD(tk.address, tk.decimals);
+      const node = makeSuggestionItem(tk, {change: stats.change ?? null, changePeriod: stats.changePeriod || null, image: tk.logoURI || stats.image}, price);
+      node.addEventListener('click', ()=>{ applyTokenSelection((side==='from')?'from':'to', tk); box.style.display='none'; updateEstimate(); scheduleActivePriceRefresh(); focusAndPlaceCaretAtEnd((side==='from')?fromTokenInput:toTokenInput); detachSuggestionScrollSafety(box); restoreBodyScroll(); });
+      box.appendChild(node);
+    }
+    box.style.display = top.length ? 'block' : 'none';
+  })();
+}
+
+/* stop wheel/touch from scrolling parent when inside suggestions */
+function attachSuggestionScrollSafety(box){
+  // ensure box is scrollable, lock body scroll
+  const wheelHandler = e => {
+    // allow inner scroll but prevent the event from bubbling to page
+    e.stopPropagation();
+    // If the element can scroll, allow default; otherwise prevent default to avoid overscroll on some devices
+    // do not call preventDefault unconditionally (so inner scrolling still works)
+  };
+  const touchHandler = e => { e.stopPropagation(); };
+  box._wheel = wheelHandler;
+  box._touch = touchHandler;
+  box.addEventListener('wheel', wheelHandler, { passive: false });
+  box.addEventListener('touchmove', touchHandler, { passive: false });
+  // clicking outside hides
+  setTimeout(()=> {
+    document.addEventListener('click', box._outsideClick = (ev)=> {
+      if (!box.contains(ev.target)) {
+        box.style.display='none';
+        detachSuggestionScrollSafety(box);
+        restoreBodyScroll();
+        document.removeEventListener('click', box._outsideClick);
+      }
+    });
+  }, 10);
+}
+function detachSuggestionScrollSafety(box){
+  try{
+    if (box._wheel) box.removeEventListener('wheel', box._wheel);
+    if (box._touch) box.removeEventListener('touchmove', box._touch);
+    if (box._outsideClick) document.removeEventListener('click', box._outsideClick);
+    box._wheel = null; box._touch = null; box._outsideClick = null;
+  }catch(e){}
+}
+
+/* AUTOCOMPLETE SETUP */
+function setupAutocomplete(inputEl, boxEl, side){
+  let timer = null;
+  inputEl.addEventListener('input', ()=>{ clearTimeout(timer); timer = setTimeout(()=> handle(inputEl.value.trim().toLowerCase()), 140); updateActionButtonsState(); });
+  inputEl.addEventListener('focus', ()=> { const q = inputEl.value.trim().toLowerCase(); hideSymbolOnFocus(side); if (!q) showDefaultList(side); else handle(q); placeCaretAtEnd(inputEl); });
+  inputEl.addEventListener('blur', ()=> setTimeout(()=> { if (!document.activeElement || !boxEl.contains(document.activeElement)) { boxEl.style.display='none'; restoreSymbolOnBlur(side); detachSuggestionScrollSafety(boxEl); restoreBodyScroll(); } }, 180));
+
+  async function handle(q){
+    boxEl.innerHTML = ''; if (!q){ boxEl.style.display='none'; return; }
+    if (isAddress(q)){
+      let info = tokenMap.get(low(q));
+      if (!info) info = await fetchOnchainTokenInfo(q);
+      if (info){
+        const stat = cgStatsMap.get(low(info.symbol)) || cgStatsMap.get(low(info.name)) || null;
+        const price = stat?.price ?? await getTokenPriceUSD(info.address, info.decimals);
+        const node = makeSuggestionItem(info, {change: stat?.change ?? null, changePeriod: stat?.changePeriod ?? null, image: info.logoURI}, price);
+        node.addEventListener('click', ()=>{ applyTokenSelection(side, info); boxEl.style.display='none'; updateEstimate(); scheduleActivePriceRefresh(); focusAndPlaceCaretAtEnd(inputEl); detachSuggestionScrollSafety(boxEl); restoreBodyScroll(); });
+        boxEl.appendChild(node); boxEl.style.display='block';
+        stopBodyScroll(); attachSuggestionScrollSafety(boxEl);
+      }
+      return;
+    }
+
+    if (suggestionCache.has(q)){ renderSuggestionsFromCache(q, side, boxEl); stopBodyScroll(); attachSuggestionScrollSafety(boxEl); return; }
+    await ensureTokensLoaded();
+
+    const matches = tokenList.filter(t => {
+      const s = t.symbol || '', n = t.name || '';
+      return (s.toLowerCase().includes(q) || n.toLowerCase().includes(q));
+    });
+
+    const cgMatches = matches.filter(t => cgStatsMap.has(low(t.symbol)) || cgStatsMap.has(low(t.name)))
+      .map(t => {
+        const stats = cgStatsMap.get(low(t.symbol)) || cgStatsMap.get(low(t.name)) || {volume24h:0,volume12h:null,price:null,change:null,changePeriod:null,image:''};
+        const startBonus = ((t.symbol && t.symbol.toLowerCase().startsWith(q)) || (t.name && t.name.toLowerCase().startsWith(q))) ? 1e12 : 0;
+        const v24 = stats.volume24h || 0;
+        const v12 = stats.volume12h || 0;
+        const score = v24 + (v12 * 1.2) + startBonus;
+        return {t, stats, score};
+      });
+    cgMatches.sort((a,b)=> b.score - a.score);
+
+    const inchMatches = matches.filter(t => {
+      const s = t.symbol || '', n = t.name || '';
+      const hasCG = cgStatsMap.has(low(s)) || cgStatsMap.has(low(n));
+      return !hasCG && (s.toLowerCase().includes(q) || n.toLowerCase().includes(q));
+    }).map(t => { const startBonus = ((t.symbol && t.symbol.toLowerCase().startsWith(q)) || (t.name && t.name.toLowerCase().startsWith(q))) ? 1e10 : 0; return {t,stats:null,score:startBonus}; })
+      .sort((a,b)=> b.score - a.score);
+
+    const merged = cgMatches.concat(inchMatches).slice(0, 12);
+    const cacheResult = merged.map(x => ({ address: x.t.address, symbol: x.t.symbol, name: x.t.name, logoURI: x.t.logoURI, score: x.score }));
+    suggestionCache.set(q, cacheResult);
+
+    stopBodyScroll();
+    attachSuggestionScrollSafety(boxEl);
+
+    for (const s of merged){
+      const tk = s.t;
+      const stats = s.stats || {change:null,changePeriod:null,image: tk.logoURI||''};
+      (async ()=>{
+        const price = (s.stats && s.stats.price) ? s.stats.price : await getTokenPriceUSD(tk.address, tk.decimals);
+        const node = makeSuggestionItem(tk, {change: stats.change ?? null, changePeriod: stats.changePeriod ?? null, image: tk.logoURI || ''}, price);
+        node.addEventListener('click', ()=>{ applyTokenSelection(side, tk); boxEl.style.display='none'; updateEstimate(); scheduleActivePriceRefresh(); focusAndPlaceCaretAtEnd(inputEl); detachSuggestionScrollSafety(boxEl); restoreBodyScroll(); });
+        boxEl.appendChild(node);
+      })();
+    }
+    boxEl.style.display = merged.length ? 'block' : 'none';
+  }
+}
+function renderSuggestionsFromCache(q, side, box){
+  const cached = suggestionCache.get(q) || [];
+  box.innerHTML = '';
+  (async ()=>{
+    for (const item of cached.slice(0,12)){
+      const tk = tokenMap.get(low(item.address)) || { address: item.address, symbol: item.symbol, name: item.name, logoURI: item.logoURI };
+      const stats = cgStatsMap.get(low(tk.symbol)) || cgStatsMap.get(low(tk.name)) || null;
+      const price = await getTokenPriceUSD(tk.address, tk.decimals || 18);
+      const node = makeSuggestionItem(tk, {change: stats?.change ?? null, changePeriod: stats?.changePeriod ?? null, image: tk.logoURI || stats?.image}, price);
+      node.addEventListener('click', ()=>{ applyTokenSelection(side, tk); box.style.display='none'; updateEstimate(); scheduleActivePriceRefresh(); focusAndPlaceCaretAtEnd((side==='from')?fromTokenInput:toTokenInput); detachSuggestionScrollSafety(box); restoreBodyScroll(); });
+      box.appendChild(node);
+    }
+    box.style.display = cached.length ? 'block' : 'none';
+  })();
+}
+
+/* attach autocomplete */
+setupAutocomplete(fromTokenInput, fromSuggestions, 'from');
+setupAutocomplete(toTokenInput, toSuggestions, 'to');
+
+/* =================== SELECTION, USD DISPLAY, PASTE, RESOLVE =================== */
+const DARK_SVG_PLACEHOLDER = 'data:image/svg+xml;utf8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36"><rect width="100%" height="100%" rx="8" ry="8" fill="#151225"/></svg>`);
+
+function applyTokenSelection(side, tokenObj){
+  if (!tokenObj) return;
+
+  // Prevent same token chosen on both sides
+  const otherSide = (side === 'from') ? 'to' : 'from';
+  const otherInput = (otherSide === 'from') ? fromTokenInput : toTokenInput;
+  const otherAddr = low(otherInput.dataset.address || '');
+
+  if (otherAddr && low(tokenObj.address) === otherAddr) {
+    showToast('Token already selected in the other field. Choose a different token.', { type: 'warn' });
+    return;
+  }
+
+  const input = (side === 'from') ? fromTokenInput : toTokenInput;
+  const logo = (side === 'from') ? fromLogo : toLogo;
+  const chip = (side === 'from') ? fromChip : toChip;
+  const symbolEl = (side === 'from') ? $('fromSymbol') : $('toSymbol');
+  const box = (side === 'from') ? fromBox : toBox;
+
+  input.value = tokenObj.symbol || tokenObj.name || '';
+  symbolEl.textContent = tokenObj.symbol || tokenObj.name || '';
+  input.dataset.address = low(tokenObj.address || tokenObj.address);
+  input.dataset.decimals = tokenObj.decimals || 18;
+  const hiRes = tokenObj.logoURI || tokenObj.image || '';
+  if (hiRes) {
+    logo.src = hiRes;
+    logo.style.display = 'block';
+  } else {
+    logo.src = DARK_SVG_PLACEHOLDER;
+    logo.style.display = 'block';
+  }
+  tokenMap.set(low(tokenObj.address), tokenObj);
+  box.classList.add('has-token');
+  ACTIVE_PRICE_ADDRS.add(low(tokenObj.address));
+  chip.textContent = tokenObj.symbol || tokenObj.name || '';
+  chip.style.display = 'inline-flex';
+  focusAndPlaceCaretAtEnd(input);
+  fetchPriceForToken(tokenObj.address, tokenObj.decimals || 18, side);
+
+  // show percent change (percent ONLY)
+  try {
+    const sym = (tokenObj.symbol||'').toLowerCase();
+    const nm = (tokenObj.name||'').toLowerCase();
+    const stat = cgStatsMap.get(sym) || cgStatsMap.get(nm) || null;
+    if (stat && typeof stat.change === 'number') {
+      const el = (side==='from')? fromChangeEl : toChangeEl;
+      el.style.display = 'block';
+      el.textContent = (stat.change >= 0 ? '+' : '') + stat.change.toFixed(2) + '%';
+      el.style.color = stat.change >= 0 ? '#9ef39e' : '#ff9e9e';
+    } else {
+      const el = (side==='from')? fromChangeEl : toChangeEl;
+      if (el) el.style.display = 'none';
+    }
+  } catch(e){}
+  updateActionButtonsState();
+}
+function clearTokenSelection(side){
+  const box = (side === 'from') ? fromBox : toBox;
+  box.classList.remove('has-token');
+  const chip = (side === 'from') ? fromChip : toChip;
+  chip.style.display = 'none';
+  const changeEl = (side === 'from') ? fromChangeEl : toChangeEl;
+  if (changeEl) changeEl.style.display = 'none';
+}
+
+/* paste handling — if user pastes a token address detect it */
+document.querySelectorAll('.input-box input[type="text"], .input-box input[type="number"]').forEach(inp=>{
+  inp.addEventListener('paste', (ev)=>{
+    const txt = (ev.clipboardData || window.clipboardData).getData('text').trim();
+    if (isAddress(txt)) {
+      setTimeout(async ()=> {
+        inp.dataset.address = low(txt);
+        let info = tokenMap.get(low(txt)) || await fetchOnchainTokenInfo(txt);
+        if (info) {
+          inp.dataset.decimals = info.decimals || 18;
+          inp.value = info.symbol || info.name || txt.slice(0,8);
+          tokenMap.set(info.address, info);
+          const logo = (inp.id === 'fromToken') ? fromLogo : toLogo;
+          const chip = (inp.id === 'fromToken') ? fromChip : toChip;
+          if (info.logoURI) { logo.src = info.logoURI; logo.style.display = 'block'; } else { logo.src = DARK_SVG_PLACEHOLDER; logo.style.display = 'block'; }
+          const box = (inp.id === 'fromToken') ? fromBox : toBox;
+          box.classList.add('has-token');
+          chip.textContent = info.symbol || info.name || '';
+          chip.style.display = 'inline-flex';
+          updateUsdVisibility();
+          fetchBothPrices(); updateQuoteDebounced(); updateEstimate();
+          updateActionButtonsState();
+        }
+      }, 10);
+    }
+  });
+});
+
+async function fetchOnchainTokenInfo(address){
+  try {
+    const addrL = low(address);
+    if (tokenMap.has(addrL)) return tokenMap.get(addrL);
+    const rpcProvider = await getRpcProvider();
+    const abi = ["function symbol() view returns (string)","function name() view returns (string)","function decimals() view returns (uint8)"];
+    const c = new ethers.Contract(address, abi, rpcProvider);
+    const [symbol,name,decimals] = await Promise.all([ c.symbol().catch(()=>null), c.name().catch(()=>null), c.decimals().catch(()=>18) ]);
+    const info = { address: addrL, symbol: symbol||address.slice(0,6), name: name||symbol||address.slice(0,8), decimals: decimals||18, logoURI: '' };
+    tokenMap.set(info.address, info);
+    if (!tokenList.find(t => t.address === info.address)) tokenList.push(info);
+    return info;
+  } catch(e){ console.warn('fetchOnchainTokenInfo failed', e); return null; }
+}
+
+/* display USD/unit */
+async function fetchPriceForToken(address, decimals, side){
+  try {
+    if (!address) return;
+    const price = await getTokenPriceUSD(address, decimals);
+    const amtEl = (side === 'from') ? fromAmountEl : toAmountEl;
+    const amt = Number(amtEl.value || 0);
+
+    const usdEl = (side === 'from') ? fromUsdSmall : toUsdSmall;
+    const unitEl = (side === 'from') ? fromUnitSmall : toUnitSmall;
+
+    if (price != null && !Number.isNaN(amt) && amt>0) {
+      usdEl.textContent = '≈ ' + formatUSD(Number(price) * amt);
+      usdEl.style.display = 'block';
+      unitEl.textContent = `${formatUSD(price)} / unit`;
+      unitEl.style.display = 'block';
+    } else if (price != null) {
+      usdEl.textContent = formatUSD(price);
+      usdEl.style.display = 'block';
+      unitEl.textContent = `${formatUSD(price)} / unit`;
+      unitEl.style.display = 'block';
+    } else {
+      usdEl.textContent = '—';
+      unitEl.textContent = '— / unit';
+      usdEl.style.display = 'block';
+      unitEl.style.display = 'block';
+    }
+
+    const t = tokenMap.get(low(address));
+    try {
+      const stat = (t && t.symbol) ? cgStatsMap.get(low(t.symbol)) || cgStatsMap.get(low(t.name || '')) : null;
+      const changeEl = (side==='from')? fromChangeEl : toChangeEl;
+      if (stat && (typeof stat.change === 'number')) {
+        changeEl.style.display = 'block';
+        changeEl.textContent = (stat.change >= 0 ? '+' : '') + stat.change.toFixed(2) + '%';
+        changeEl.style.color = stat.change >= 0 ? '#9ef39e' : '#ff9e9e';
+      } else if (changeEl) {
+        changeEl.style.display = 'none';
+      }
+    } catch(e){}
+  } catch(e){ console.warn('fetchPriceForToken error', e); }
+}
+async function fetchBothPrices(){
+  const fAddr = low(fromTokenInput.dataset.address || '');
+  const tAddr = low(toTokenInput.dataset.address || '');
+  const fDec = Number(fromTokenInput.dataset.decimals || 18);
+  const tDec = Number(toTokenInput.dataset.decimals || 18);
+  await Promise.all([
+    fAddr ? fetchPriceForToken(fAddr, fDec, 'from') : Promise.resolve(),
+    tAddr ? fetchPriceForToken(tAddr, tDec, 'to') : Promise.resolve()
+  ]);
+}
+
+/* =================== QUOTE AGGREGATION (unchanged core functions) =================== */
+/* fetch1InchSwapQuote, fetch0xQuote, normalizeBigNumberString, getBestQuote (kept) */
+async function fetch1InchSwapQuote(fromAddr,toAddr,amountWei,slippagePercent,fromAddress){
+  try{
+    const qUrl = `${ONEINCH_BASE}/quote?fromTokenAddress=${fromAddr}&toTokenAddress=${toAddr}&amount=${amountWei}`;
+    const r = await fetchWithTimeout(qUrl,{},3500);
+    if(!r.ok) throw new Error('1inch quote fail');
+    const j = await r.json();
+    return {source:'1inch', toTokenAmount: j.toTokenAmount ? j.toTokenAmount : null, raw:j};
+  }catch(e){ return null; }
+}
+async function fetch0xQuote(fromAddr,toAddr,amountWei){
+  try{
+    const url = `${ZEROX_BASE}/swap/v1/quote?sellToken=${encodeURIComponent(fromAddr)}&buyToken=${encodeURIComponent(toAddr)}&sellAmount=${amountWei}`;
+    const r = await fetchWithTimeout(url, { headers: { '0x-api-key': ZEROX_API_KEY } }, 3500);
+    if(!r.ok) throw new Error('0x quote fail');
+    const j = await r.json();
+    return {source:'0x', toTokenAmount: j?.buyAmount ?? null, raw:j};
+  }catch(e){ return null; }
+}
+function normalizeBigNumberString(val, decimals=18){ try{ if(!val) return 0; return Number(ethers.utils.formatUnits(ethers.BigNumber.from(val), decimals)); }catch(e){ return 0; } }
+
+async function getBestQuote(fromAddr,toAddr,amountRaw,fromDecimals,toDecimals,slippagePercent){
+  const amountWei = amountRaw;
+  // Parallel: try 0x and 1inch
+  const [q0,q1] = await Promise.all([
+    fetch0xQuote(fromAddr,toAddr,amountWei),
+    fetch1InchSwapQuote(fromAddr,toAddr,amountWei,slippagePercent)
+  ]);
+
+  const results = [q0,q1].filter(Boolean);
+  if (!results.length) return null;
+
+  // choose best normalized output
+  let chosen = null;
+  for(const r of results){
+    let out = null;
+    try {
+      if (r.source === '0x') out = normalizeBigNumberString(r.toTokenAmount, toDecimals);
+      else if (r.source === '1inch') out = normalizeBigNumberString(r.toTokenAmount, toDecimals);
+    } catch(e){}
+    if (typeof out === 'number') {
+      const obj = { r, normalized: out };
+      if (!chosen || obj.normalized > chosen.normalized) chosen = obj;
+    }
+  }
+  return chosen;
+}
+
+/* =================== SUGGESTIONS & DEFAULTS =================== */
+async function initDefaults(){
+  try{
+    await ensureTokensLoaded();
+    // prefer USDC for from
+    const usdc = tokenList.find(t=> low(t.address) === low(USDC_ADDR)) || tokenList.find(t => (t.symbol && low(t.symbol) === 'usdc'));
+    // pick top by recent activity; prefer volume12h if available, otherwise 24h
+    let maxVol = 0; let top = null;
+    for (const [k,stat] of cgStatsMap.entries()){
+      if (stat) {
+        const v12 = stat.volume12h || 0;
+        const v24 = stat.volume24h || 0;
+        const vol = v12 > 0 ? v12 : v24;
+        if (vol > maxVol) { maxVol = vol; top = k; }
+      }
+    }
+    let topToken = null;
+    if (top) topToken = tokenList.find(t => (t.symbol && t.symbol.toLowerCase() === top) || (t.name && t.name.toLowerCase() === top));
+    if (!topToken) topToken = tokenList.find(t => cgStatsMap.has(low(t.symbol)) || cgStatsMap.has(low(t.name)));
+    // apply
+    if (usdc) {
+      applyTokenSelection('from', usdc);
+      $('fromSymbol').textContent = usdc.symbol || 'USDC';
+      fromTokenInput.value = usdc.symbol || usdc.name;
+      fromTokenInput.dataset.address = low(usdc.address);
+      fromTokenInput.dataset.decimals = usdc.decimals || 6;
+    }
+    // --- NEW SAFE TO-TOKEN DEFAULT LOGIC --- //
+
+// --- NEW TO-TOKEN DEFAULT LOGIC --- //
+const NOLA_ADDR = "0x1515546B052151D5eb8CCB1bcf2857E0C6f51451";
+const WBTC_ADDR = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599"; // mainnet WBTC
+
+// find tokens
+const nolaToken = tokenList.find(t => low(t.address) === low(NOLA_ADDR));
+const wbtcToken = tokenList.find(t => low(t.address) === low(WBTC_ADDR));
+
+let toDefault = null;
+
+// priority 1 — NOLA
+if (nolaToken) {
+  toDefault = nolaToken;
+}
+// priority 2 — WBTC
+else if (wbtcToken) {
+  toDefault = wbtcToken;
+}
+// priority 3 — the previously calculated top-volume token
+else if (topToken) {
+  toDefault = topToken;
+}
+
+// if TO defaults to same token as FROM, pick next best by volume
+if (toDefault && usdc && low(toDefault.address) === low(usdc.address)) {
+  const fallback = tokenList.find(t =>
+    low(t.address) !== low(usdc.address) &&
+    (cgStatsMap.has(low(t.symbol)) || cgStatsMap.has(low(t.name)))
+  );
+  if (fallback) toDefault = fallback;
+}
+
+// apply TO-token if found
+if (toDefault) {
+  applyTokenSelection('to', toDefault);
+  $('toSymbol').textContent = toDefault.symbol || toDefault.name;
+  toTokenInput.value = toDefault.symbol || toDefault.name;
+  toTokenInput.dataset.address = low(toDefault.address);
+  toTokenInput.dataset.decimals = toDefault.decimals || 18;
+
+    }
+    await fetchBothPrices();
+    updateEstimate();
+    updateActionButtonsState();
+  } catch(e){ console.warn('initDefaults fail', e); }
+}
+
+/* run init */
+(async function init(){
+  await ensureTokensLoaded();
+  await initDefaults();
+  startBackgroundRefresh();
+})();
+
+/* small helper: update USD visible fields */
+function updateUsdVisibility(){
+  fromUsdSmall.style.display = 'block';
+  toUsdSmall.style.display = 'block';
+  fromUnitSmall.style.display = 'block';
+  toUnitSmall.style.display = 'block';
+}
+
+/* caret click to show suggestions */
+fromBox.querySelector('.left').addEventListener('click', (e)=>{
+  if (e.target.closest('.suggestions') || e.target.closest('input[type="number"]')) return;
+  focusAndPlaceCaretAtEnd(fromTokenInput);
+  showDefaultList('from');
+});
+toBox.querySelector('.left').addEventListener('click', (e)=>{
+  if (e.target.closest('.suggestions') || e.target.closest('input[type="number"]')) return;
+  focusAndPlaceCaretAtEnd(toTokenInput);
+  showDefaultList('to');
+});
+
+/* =================== BACKGROUND REFRESH =================== */
+function startBackgroundRefresh(){
+  setInterval(()=>{ try{ fetchBothPrices(); }catch(e){} }, 7000);
+}
+function scheduleActivePriceRefresh(){
+  setTimeout(()=>{ try{ fetchBothPrices(); }catch(e){} }, 900);
+}
+
+/* =================== ENABLE / DISABLE ACTION BUTTONS (professional look) =================== */
+function updateActionButtonsState(){
+  const fromAddr = low(fromTokenInput.dataset.address || '');
+  const toAddr = low(toTokenInput.dataset.address || '');
+  const amount = Number(fromAmountEl.value || 0);
+  const estimate = Number(toAmountEl.value || 0);
+  const canSwap = fromAddr && toAddr && (amount > 0) && (!Number.isNaN(estimate) && estimate > 0);
+  // quick swap requires cached quote
+  let quickOk = false;
+  if (fromAddr && toAddr && (amount > 0)) {
+    try {
+      const fromDecimals = Number(fromTokenInput.dataset.decimals || 18);
+      const amtWei = ethers.utils.parseUnits(String(amount), fromDecimals).toString();
+      const sl = Number(getSelectedSlippage() || 1);
+      if (getCachedQuote(makeQuoteKey(fromAddr,toAddr,amtWei,sl))) quickOk = true;
+    } catch(e){}
+  }
+  setEnabledState(swapBtn, !!canSwap);
+  setEnabledState(quickSwapBtn, !!quickOk);
+}
+
+function setEnabledState(btn, enabled){
+  if (enabled) { btn.removeAttribute('disabled'); btn.style.opacity='1'; } else { btn.setAttribute('disabled','true'); btn.style.opacity='0.5'; }
+}
+
+/* initial state */
+updateActionButtonsState();
+
+/* accessory: update states on focus/blur changes */
+[fromTokenInput, toTokenInput, fromAmountEl, toAmountEl].forEach(el=>{
+  el.addEventListener('input', ()=> updateActionButtonsState());
+  el.addEventListener('change', ()=> updateActionButtonsState());
+});
+
+/* =================== SWAP ICON BEHAVIOUR =================== */
+swapOutside.addEventListener('click', ()=>{
+  swapOutside.classList.add('pressed');
+  setTimeout(()=> swapOutside.classList.remove('pressed'), 300);
+});
+
+/* =================== QUOTE + UI (debounce & update) =================== */
+let quoteTimer = null;
+function updateQuoteDebounced(){ clearTimeout(quoteTimer); quoteTimer = setTimeout(()=> updateQuote(), 140); }
+async function updateQuote(){
+  try {
+    const fromAddr = low(fromTokenInput.dataset.address || '');
+    const toAddr = low(toTokenInput.dataset.address || '');
+    const amount = fromAmountEl.value;
+    if (!fromAddr || !toAddr || !amount) { await fetchBothPrices(); updateActionButtonsState(); return; }
+    const fromDecimals = Number(fromTokenInput.dataset.decimals || tokenMap.get(fromAddr)?.decimals || 18);
+    const toDecimals = Number(toTokenInput.dataset.decimals || tokenMap.get(toAddr)?.decimals || 18);
+    const parsed = ethers.utils.parseUnits(String(amount), fromDecimals).toString();
+    const sl = Number(getSelectedSlippage() || 1);
+    const key = makeQuoteKey(fromAddr,toAddr,parsed,sl);
+    const cached = getCachedQuote(key);
+    if (cached && cached.normalized !== undefined) {
+      toAmountEl.value = cached.normalized === 0 ? '' : Number(cached.normalized.toFixed(6)).toString();
+      await fetchBothPrices();
+      updateActionButtonsState();
+      return;
+    }
+    const best = await getBestQuote(fromAddr,toAddr,parsed,fromDecimals,toDecimals,sl);
+    if(best && best.r){
+      const normalizedOut = best.normalized;
+      toAmountEl.value = (normalizedOut===0)? '' : Number(normalizedOut.toFixed(6)).toString();
+      cacheQuote(key, { best, normalized: normalizedOut });
+    } else {
+      try {
+        const r = await fetchWithTimeout(`${ONEINCH_BASE}/quote?fromTokenAddress=${fromAddr}&toTokenAddress=${toAddr}&amount=${parsed}`,{},3000);
+        if (r.ok){ const j = await r.json(); if (j && j.toTokenAmount) { const formattedTo = ethers.utils.formatUnits(ethers.BigNumber.from(j.toTokenAmount), toDecimals); toAmountEl.value = formattedTo; cacheQuote(key, { best: { r: { source:'1inch', raw: j }, normalized: Number(formattedTo) }, normalized: Number(formattedTo) }); } }
+      } catch(e){}
+    }
+    await fetchBothPrices();
+    updateActionButtonsState();
+  } catch (e) {
+    console.warn('updateQuote error (aggregator)', e);
+    await fetchBothPrices();
+    updateActionButtonsState();
+  }
+}
+fromAmountEl.addEventListener('input', ()=>{ updateQuoteDebounced(); updateEstimate(); });
+
+/* =================== SIMPLE MATH ESTIMATE =================== */
+async function updateEstimate(){
+  try {
+    await ensureTokensLoaded();
+    resolveTokenInputsIfNeeded();
+    const fromAddr = low(fromTokenInput.dataset.address || '');
+    const toAddr = low(toTokenInput.dataset.address || '');
+    const fromAmount = Number(fromAmountEl.value || 0);
+    if (!fromAddr || !toAddr || !fromAmount || Number.isNaN(fromAmount) || fromAmount <= 0) { updateActionButtonsState(); return; }
+    const fDec = Number(fromTokenInput.dataset.decimals || tokenMap.get(fromAddr)?.decimals || 18);
+    const tDec = Number(toTokenInput.dataset.decimals || tokenMap.get(toAddr)?.decimals || tokenMap.get(toAddr)?.decimals || 18);
+    const [fromPrice, toPrice] = await Promise.all([ getTokenPriceUSD(fromAddr, fDec), getTokenPriceUSD(toAddr, tDec) ]);
+    if (!fromPrice || !toPrice) { updateActionButtonsState(); return; }
+    const fromUSD = Number(fromAmount) * Number(fromPrice);
+    const estimatedTo = fromUSD / Number(toPrice);
+    const display = (Number.isFinite(estimatedTo)) ? Number(estimatedTo.toFixed(6)).toString() : '';
+    toAmountEl.value = display;
+
+    fromUsdSmall.style.display = 'block';
+    toUsdSmall.style.display = 'block';
+    fromUnitSmall.style.display = 'block';
+    toUnitSmall.style.display = 'block';
+
+    fromUsdSmall.textContent = `≈ ${formatUSD(fromUSD)}`;
+    fromUnitSmall.textContent = `${formatUSD(fromPrice)} / unit`;
+    toUsdSmall.textContent = `${formatUSD(toPrice)} / unit`;
+    toUnitSmall.textContent = `—`;
+    updateActionButtonsState();
+  } catch(e){ console.warn('updateEstimate error', e); updateActionButtonsState(); }
+}
+
+/* =================== RESOLVE TYPED TOKENS HEURISTICALLY =================== */
+function resolveTokenInputsIfNeeded(){
+  const tryResolve = (inputEl) => {
+    const val = (inputEl.value || '').trim(); if (!val || inputEl.dataset.address) return;
+    const q = val.toLowerCase();
+    let found = tokenList.find(t => t.symbol && t.symbol.toLowerCase() === q && (cgStatsMap.has(low(t.symbol)) || cgStatsMap.has(low(t.name))));
+    if (!found) found = tokenList.find(t => t.symbol && t.symbol.toLowerCase() === q);
+    if (!found) found = tokenList.find(t => t.symbol && t.symbol.toLowerCase().startsWith(q));
+    if (!found) found = tokenList.find(t => t.name && t.name.toLowerCase().includes(q));
+    if (found){
+      inputEl.dataset.address = found.address;
+      inputEl.dataset.decimals = found.decimals || 18;
+      const logo = (inputEl.id === 'fromToken')? fromLogo : toLogo;
+      const chip = (inputEl.id === 'fromToken')? fromChip : toChip;
+      if (found.logoURI){ logo.src = found.logoURI; logo.style.display = 'block'; } else { logo.src = DARK_SVG_PLACEHOLDER; logo.style.display = 'block'; }
+      const box = (inputEl.id === 'fromToken')? fromBox : toBox;
+      box.classList.add('has-token');
+      ACTIVE_PRICE_ADDRS.add(found.address);
+      chip.textContent = found.symbol || found.name || '';
+      chip.style.display = 'inline-flex';
+
+      try {
+        const stat = cgStatsMap.get(low(found.symbol)) || cgStatsMap.get(low(found.name));
+        const el = (inputEl.id === 'fromToken') ? fromChangeEl : toChangeEl;
+        if (stat && typeof stat.change === 'number') {
+          el.style.display = 'block';
+          el.textContent = (stat.change >= 0 ? '+' : '') + stat.change.toFixed(2) + '%';
+          el.style.color = stat.change >= 0 ? '#9ef39e' : '#ff9e9e';
+        } else el.style.display = 'none';
+      } catch(_) {}
+    }
+  };
+  tryResolve(fromTokenInput); tryResolve(toTokenInput);
+}
+
+/* =================== SWAP BUTTON behaviour (with allowance/chain checks) =================== */
+/* full swap handler kept intact (unchanged except minor UX touches) */
+swapBtn.addEventListener('click', async ()=> {
+  if (swapBtn.disabled) return;
+  setBusy(swapBtn, true);
+  try{
+    await ensureWalletConnectedOrPrompt();
+    await ensureCorrectChainOrPrompt();
+    if(!userAddress){ showToast('Wallet connection required', { type: 'error' }); return; }
+    const fromAddr = low(fromTokenInput.dataset.address || '');
+    const toAddr = low(toTokenInput.dataset.address || '');
+    const amount = fromAmountEl.value;
+    if(!fromAddr || !toAddr || !amount || Number(amount) <= 0){ showToast('Enter valid amount and tokens', {type:'warn'}); return; }
+
+    const fromDecimals = Number(fromTokenInput.dataset.decimals || tokenMap.get(fromAddr)?.decimals || 18);
+    const toDecimals = Number(toTokenInput.dataset.decimals || tokenMap.get(toAddr)?.decimals || tokenMap.get(toAddr)?.decimals || 18);
+    const amountWei = ethers.utils.parseUnits(String(amount), fromDecimals).toString();
+    const slippage = Number(getSelectedSlippage() || 1);
+
+    showToast('Fetching best quote...', { ttl: 2500 });
+    const best = await getBestQuote(fromAddr,toAddr,amountWei,fromDecimals,toDecimals,slippage);
+    if(!best || !best.r){ showToast('No routes found', { type: 'error' }); return; }
+
+    const feeAmountRawBN = ethers.BigNumber.from(amountWei).mul(ethers.BigNumber.from(Math.round(FEE_PERCENT * 1e8))).div(ethers.BigNumber.from(1e8));
+    const feeBN = feeAmountRawBN;
+    const remainderBN = ethers.BigNumber.from(amountWei).sub(feeBN);
+
+    const approxOut = best.normalized;
+    const label = `Swap ${amount} ${fromTokenInput.value} → approx ${approxOut.toFixed(6)} ${toTokenInput.value} via ${best.r.source}`;
+    if(!confirm(label + '\n\nProceed with transaction?')){ showToast('Swap cancelled', {type:'info'}); return; }
+
+    if (feeBN.gt(0) && FEE_RECIPIENT && FEE_RECIPIENT !== '0xFEE_RECIPIENT_PLACEHOLDER') {
+      showToast('Sending small fee to platform...', { ttl: 3000 });
+      if (fromAddr === MATIC_ADDR) {
+        const txReq = { to: FEE_RECIPIENT, value: feeBN };
+        await signer.sendTransaction(txReq);
+      } else {
+        const erc20 = new ethers.Contract(fromAddr, ["function transfer(address to, uint amt) public returns (bool)"], signer);
+        await erc20.transfer(FEE_RECIPIENT, feeBN);
+      }
+      showToast('Fee sent — proceeding with swap', { ttl: 2500 });
+    } else if (feeBN.gt(0)) {
+      showToast('Fee placeholder not set — fee reserved off-chain; swap continues.', { ttl: 2500 });
+    }
+
+    if (remainderBN.lte(0)) { showToast('Amount after fee is zero; aborting', { type:'error' }); return; }
+    showToast('Submitting swap transaction.', { ttl: 2500 });
+    let txResp = null;
+    if (best.r.source === '1inch') {
+      try {
+        txResp = await performSwapUsing1inch(fromAddr,toAddr,remainderBN.toString(),fromDecimals,slippage);
+      } catch(e){
+        console.error('1inch swap failed', e);
+        const msg = parseSwapError(e);
+        showToast(msg, { type: 'error' });
+        // try fallback to 0x if available
+        const q0 = await fetch0xQuote(fromAddr,toAddr,remainderBN.toString());
+        if (q0) {
+          try { txResp = await performSwapUsing0x(q0); } catch(e2){ console.error('0x fallback failed', e2); showToast(parseSwapError(e2), { type: 'error' }); }
+        }
+      }
+    } else if (best.r.source === '0x') {
+      try {
+        txResp = await performSwapUsing0x(best.r);
+      } catch(e){ console.error('0x swap failed', e); showToast(parseSwapError(e), { type: 'error' }); }
+      if (!txResp) {
+        const q1 = await fetch1InchSwapQuote(fromAddr,toAddr,remainderBN.toString(),slippage);
+        if (q1) {
+          try { txResp = await performSwapUsing1inch(fromAddr,toAddr,remainderBN.toString(),fromDecimals,slippage); } catch(e){ console.error('1inch fallback failed', e); showToast(parseSwapError(e), { type: 'error' }); }
+        }
+      }
+    }
+
+    if(!txResp){ showToast('Swap failed (no tx)', { type: 'error' }); return; }
+    showToast('Transaction sent — awaiting confirmation', { ttl: 4000, txHash: txResp.hash });
+    const receipt = await txResp.wait();
+    if(receipt && receipt.status === 1){ showToast('Swap successful — tx '+receipt.transactionHash, { type: 'success', txHash: receipt.transactionHash }); } else { showToast('Swap completed but might have failed — check explorer.', { type: 'warn', txHash: receipt ? receipt.transactionHash : null }); }
+  }catch(e){
+    console.error('swap error', e);
+    showToast(parseSwapError(e), { type: 'error' });
+  } finally {
+    setBusy(swapBtn, false);
+    updateActionButtonsState();
+  }
+});
+
+/* ================ QUICK SWAP ================ */
+/* improved quick-swap: if no cached quote try to fetch one immediately, then proceed */
+quickSwapBtn.addEventListener('click', async ()=>{
+  if (quickSwapBtn.disabled) return;
+  setBusy(quickSwapBtn, true);
+  try{
+    await ensureWalletConnectedOrPrompt();
+    await ensureCorrectChainOrPrompt();
+    const fromAddr = low(fromTokenInput.dataset.address || '');
+    const toAddr = low(toTokenInput.dataset.address || '');
+    const amount = fromAmountEl.value;
+    if(!fromAddr || !toAddr || !amount || Number(amount) <= 0){ showToast('Enter valid amount and tokens', {type:'warn'}); return; }
+    const fromDecimals = Number(fromTokenInput.dataset.decimals || tokenMap.get(fromAddr)?.decimals || 18);
+    const toDecimals = Number(toTokenInput.dataset.decimals || tokenMap.get(toAddr)?.decimals || 18);
+    const amountWei = ethers.utils.parseUnits(String(amount), fromDecimals).toString();
+    const slippage = Number(getSelectedSlippage() || 1);
+    const key = makeQuoteKey(fromAddr,toAddr,amountWei,slippage);
+    let cached = getCachedQuote(key);
+    if (!cached) {
+      // try to fetch a fresh quote right away
+      await updateQuote();
+      cached = getCachedQuote(key);
+      if (!cached) { showToast('No fresh cached quote available; use Swap for full quote.', {type:'warn'}); return; }
+    }
+    const best = cached.best;
+    let txResp = null;
+    try {
+      if (best.r.source === '1inch') {
+        const feeAmountRawBN = ethers.BigNumber.from(amountWei).mul(ethers.BigNumber.from(Math.round(FEE_PERCENT * 1e8))).div(ethers.BigNumber.from(1e8));
+        const remainderBN = ethers.BigNumber.from(amountWei).sub(feeAmountRawBN);
+        if (remainderBN.lte(0)) { showToast('Amount after fee is zero; aborting', { type:'error' }); return; }
+        txResp = await performSwapUsing1inch(fromAddr,toAddr,remainderBN.toString(),fromDecimals,slippage);
+      } else if (best.r.source === '0x') {
+        txResp = await performSwapUsing0x(best.r);
+      } else {
+        showToast('Cached quote source not supported for Quick Swap', { type:'error' });
+        return;
+      }
+      if (!txResp) { showToast('Quick swap submission failed', { type:'error' }); return; }
+      showToast('Quick Swap submitted — waiting confirmation', { ttl: 4000, txHash: txResp.hash });
+      const receipt = await txResp.wait();
+      if(receipt && receipt.status === 1) showToast('Quick Swap success — tx '+receipt.transactionHash, { type: 'success', txHash: receipt.transactionHash });
+      else showToast('Quick Swap completed — check explorer', { type:'warn', txHash: receipt ? receipt.transactionHash : null });
+    } catch(e){
+      console.error('quick swap error', e);
+      showToast(parseSwapError(e), { type:'error' });
+    }
+  } catch(e){ console.error(e); showToast('Quick Swap failed: '+(e.message||e), { type:'error' }); }
+  finally { setBusy(quickSwapBtn, false); updateActionButtonsState(); }
+});
+
+/* =================== ERROR PARSING =================== */
+function parseSwapError(e){
+  const s = (e && e.message) ? e.message.toLowerCase() : '';
+  if (s.includes('user-rejected') || s.includes('user rejected') || s.includes('request rejected') || s.includes('user denied')) return 'You rejected the wallet request. Please confirm the transaction in your wallet.';
+  if (s.includes('insufficient funds') || s.includes('insufficient balance')) return 'Insufficient funds for this transaction (including gas). Check wallet balance.';
+  if (s.includes('allowance') || s.includes('approve') || s.includes('insufficient allowance')) return 'Token allowance is missing. Please approve the token in your wallet (we attempt this automatically).';
+  if (s.includes('network') || s.includes('wrong-chain') || s.includes('chain')) return 'Wrong network — switch your wallet to Polygon (chain 137).';
+  return (e && e.message) ? `Transaction error: ${e.message}` : 'An unknown error occurred.';
+}
+
+/* =================== CONNECT WALLET & CHAIN SWITCH & WEB3MODAL (modern-friendly) =================== */
+/* =================== CONNECT WALLET & CHAIN SWITCH & WEB3MODAL (modern-friendly) =================== */
+
+async function initWeb3Modal(){
+  try{
+    // Prefer the modern Web3Modal HTML build when available (you already include @web3modal/html and @walletconnect/web3modal)
+    if (window.WalletConnectWeb3Modal && window.WalletConnectWeb3Modal.default) {
+      web3modal = new window.WalletConnectWeb3Modal.default({
+        projectId: WALLETCONNECT_PROJECT_ID,
+        themeMode: 'dark',
+        // allow the bundled modal to handle deep-linking and QR for mobile/desktop
+        modalOptions: { }
+      });
+      console.info('Web3Modal (WalletConnect) initialized');
+    } else if (window.Web3Modal && window.Web3Modal.default) {
+      // fallback older global
+      web3modal = new window.Web3Modal.default({ projectId: WALLETCONNECT_PROJECT_ID });
+      console.info('Fallback Web3Modal initialized');
+    } else {
+      web3modal = null;
+      console.warn('Web3Modal not available - wallet modal will be limited');
+    }
+  }catch(e){
+    console.warn('web3modal init failed', e);
+    web3modal = null;
+  }
+}
+initWeb3Modal();
+
+function shortAddr(addr){ return addr ? `${addr.slice(0,6)}…${addr.slice(-4)}` : ''; }
+function setConnectedUI(address){
+  if(address){
+    addrChip.style.display = 'inline-block';
+    addrChip.textContent = shortAddr(address);
+    connectLabel.textContent = 'Connected';
+    connectIcon.textContent = '🔗';
+    connectFloating.classList.add('connected');
+  } else {
+    addrChip.style.display = 'none';
+    connectLabel.textContent = 'Connect Wallet';
+    connectIcon.textContent = '🔌';
+    connectFloating.classList.remove('connected');
+  }
+}
+
+/* Ensure connected: prompt user to connect if not */
+async function ensureWalletConnectedOrPrompt(){
+  if (userAddress && signer) return true;
+  const ok = await connectWallet();
+  return ok;
+}
+
+/* Ensure chain is Polygon (137) and request switch if possible */
+async function ensureCorrectChainOrPrompt(){
+  try {
+    if (!provider) return false;
+    let net = null;
+    try { net = await provider.getNetwork(); } catch(e){ net = null; }
+    if (!net || net.chainId !== CHAIN_ID) {
+      // If the provider has 'request', try switching
+      if (provider.provider && provider.provider.request) {
+        try {
+          await provider.provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN_ID_HEX }] });
+          showToast('Switched network to Polygon', { type: 'success' });
+          return true;
+        } catch(switchErr){
+          showToast('Please switch wallet network to Polygon (Chain 137) and retry.', { type: 'warn' });
+          throw new Error('wrong-chain');
+        }
+      } else {
+        showToast('Connected provider is not on Polygon. Switch network to proceed.', { type: 'warn' });
+        throw new Error('wrong-chain');
+      }
+    }
+    return true;
+  } catch(e){ throw e; }
+}
+
+/* Try pairing via UniversalProvider if available (best-effort) */
+async function tryUniversalProviderPairing(){
+  try {
+    // if UniversalProvider is available on window (UMD build included), use it
+    const UP = window.UniversalProvider || (window.WalletConnect && window.WalletConnect.UniversalProvider);
+    if (!UP) return null;
+
+    // init
+    const providerInstance = await UP.init({
+      projectId: WALLETCONNECT_PROJECT_ID,
+      metadata: {
+        name: 'NOLA Exchange',
+        description: 'Connect your wallet to NOLA Exchange',
+        url: window.location.origin,
+        icons: [ window.location.origin + '/logo.png' ]
+      }
+    });
+
+    // request a pairing — init returns an object which exposes connect()
+    const pairingResult = await providerInstance.connect({ pairingTopic: undefined, timeout: 120000 });
+    // pairingResult may contain a uri for QR/pairing
+    if (pairingResult && pairingResult.uri) {
+      return { pairingURI: pairingResult.uri, providerInstance };
+    }
+    // Some builds expose .session or result that contains uri
+    if (providerInstance && providerInstance.session && providerInstance.session.uri) {
+      return { pairingURI: providerInstance.session.uri, providerInstance };
+    }
+    return { providerInstance }; // no pairingURI but we have instance
+  } catch(e){
+    console.warn('tryUniversalProviderPairing failed:', e);
+    return null;
+  }
+}
+
+/* Show pairing modal (QR + deep links) — this populates and opens #walletPairModal in DOM */
+function showPairingModal(pairingURI){
+  try {
+    const m = document.getElementById('walletPairModal');
+    if(!m) return;
+    const qrImg = m.querySelector('.pair-qr img');
+    const linkEl = m.querySelector('.pair-link');
+    const copyBtn = m.querySelector('.pair-copy');
+    const deepGrid = m.querySelector('.pair-grid');
+
+    const encoded = encodeURIComponent(pairingURI);
+    // Use public QR API for image (fast and reliable) — data sent is pairingURI
+    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=420x420&data=' + encodeURIComponent(pairingURI);
+
+    if(qrImg) qrImg.src = qrUrl;
+    if(linkEl) { linkEl.textContent = pairingURI; linkEl.href = pairingURI; }
+
+    // populate common deep-links for mobile wallets (these schemes are widely used)
+    const wallets = [
+      { id:'metamask', label:'MetaMask', href:`metamask://wc?uri=${encoded}` },
+      { id:'trust', label:'Trust Wallet', href:`trust://wc?uri=${encoded}` },
+      { id:'rainbow', label:'Rainbow', href:`rainbow://wc?uri=${encoded}` },
+      { id:'argent', label:'Argent', href:`argent://wc?uri=${encoded}` },
+      { id:'imtoken', label:'imToken', href:`imtokenv2://wallet/wc?uri=${encoded}` },
+      { id:'ledger', label:'Ledger Live', href:`ledgerlive://wc?uri=${encoded}` },
+      { id:'bitpay', label:'BitPay', href:`bitpay://wc?uri=${encoded}` },
+      { id:'other', label:'Open in Wallet', href: pairingURI }
+    ];
+
+    deepGrid.innerHTML = '';
+    wallets.forEach(w => {
+      const a = document.createElement('a');
+      a.className = 'pair-app';
+      a.setAttribute('target','_blank');
+      a.setAttribute('rel','noopener noreferrer');
+      a.href = w.href;
+      a.innerHTML = `<div class="pair-app-inner"><div class="app-icon">${w.label[0]}</div><div class="app-label">${w.label}</div></div>`;
+      deepGrid.appendChild(a);
+    });
+
+    copyBtn.onclick = async ()=>{
+      try {
+        await navigator.clipboard.writeText(pairingURI);
+        showToast('Copy successful', { type: 'success' });
+      } catch(e){ showToast('Copy failed', { type:'error' }); }
+    };
+
+    m.style.display = 'flex';
+    stopBodyScroll();
+  } catch(e){ console.warn('showPairingModal err', e); }
+}
+
+/* hide pairing modal */
+function hidePairingModal(){
+  const m = document.getElementById('walletPairModal');
+  if(!m) return;
+  m.style.display = 'none';
+  restoreBodyScroll();
+}
+
+/* The main connect wallet function (modern, mobile-friendly)
+   Strategy:
+   1) If web3modal exists -> open modal and await connect() (handles installed wallets & deep-links)
+   2) Fallback to injected (window.ethereum) if available
+   3) Try UniversalProvider pairing (WalletConnect) and show pairing modal if a pairingURI is returned
+   4) If none succeeded -> warn user
+*/
+async function connectWallet(){
+  try {
+    // If already connected, return true
+    if (userAddress && signer) return true;
+
+    // 1) If web3modal present, ask the bundled modal to connect (this handles mobile deep-links and installed wallets)
+    if (web3modal && typeof web3modal.openModal === 'function' && typeof web3modal.connect === 'function') {
+      try {
+        // Open modal UI (non-blocking)
+        await web3modal.openModal();
+        // Wait for user to choose and connect (connect() typically resolves to a provider)
+        const modalProvider = await web3modal.connect();
+        if (modalProvider) {
+          provider = new ethers.providers.Web3Provider(modalProvider, "any");
+          signer = provider.getSigner();
+          userAddress = await signer.getAddress().catch(()=>null);
+          setConnectedUI(userAddress);
+          await ensureCorrectChainOrPrompt();
+          showToast('Wallet connected', { type: 'success' });
+          return true;
+        }
+      } catch(e){
+        console.warn('web3modal connect failed', e);
+        // Continue to other methods
+      } finally {
+        // close the modal UI if provided
+        try { if (web3modal.closeModal) web3modal.closeModal(); }catch(_){}
+      }
+    }
+
+    // 2) Try injected provider (fast path for desktop/exposed extension)
+    if (window.ethereum) {
+      try {
+        const ethProvider = new ethers.providers.Web3Provider(window.ethereum, "any");
+        await ethProvider.send("eth_requestAccounts", []);
+        provider = ethProvider;
+        signer = provider.getSigner();
+        userAddress = await signer.getAddress().catch(()=>null);
+        setConnectedUI(userAddress);
+        await ensureCorrectChainOrPrompt();
+        showToast('Wallet connected (injected)', { type: 'success' });
+        return true;
+      } catch(e){
+        console.warn('Injected provider connect failed', e);
+      }
+    }
+
+    // 3) Best-effort: WalletConnect Universal Provider pairing (generate a pairing URI then show pairing modal)
+    try {
+      const res = await tryUniversalProviderPairing();
+      if (res && res.pairingURI) {
+        // show pairing QR + copyable URI to user
+        showPairingModal(res.pairingURI);
+        showToast('Scan the QR with your wallet app, or open using a wallet button below.', { type: 'info', ttl: 6000 });
+        return true;
+      } else if (res && res.providerInstance) {
+        // If a provider instance came back already connected
+        try {
+          provider = new ethers.providers.Web3Provider(res.providerInstance, "any");
+          signer = provider.getSigner();
+          userAddress = await signer.getAddress().catch(()=>null);
+          setConnectedUI(userAddress);
+          await ensureCorrectChainOrPrompt();
+          showToast('Wallet connected (universal)', { type: 'success' });
+          return true;
+        } catch(e){}
+      }
+    } catch(e){
+      console.warn('UniversalProvider pairing failed', e);
+    }
+
+    // nothing worked
+    showToast('No wallet available — install a mobile wallet or use the wallet modal', { type: 'warn' });
+    return false;
+  } catch(e){
+    console.error('connectWallet error', e);
+    showToast('Connection failed: '+(e.message||e), { type: 'error' });
+    return false;
+  }
+}
+
+/* disconnect wallet safely */
+async function disconnectWallet(confirmAsk = true){
+  try {
+    if (confirmAsk && !confirm('Disconnect wallet?')) return;
+    try {
+      // If web3modal exposes close / clear handlers
+      if (web3modal && web3modal.closeModal) web3modal.closeModal();
+      // If provider has a disconnect method (walletconnect providers do)
+      if (provider && typeof provider.disconnect === 'function') {
+        try { await provider.disconnect(); } catch(e){ /* swallow */ }
+      }
+    } catch(_) {}
+    provider = null; signer = null; userAddress = null;
+    setConnectedUI(null);
+    showToast('Wallet disconnected', { type: 'info' });
+  } catch(e){ console.warn('disconnect fail', e); }
+}
+
+/* connectFloating click: connect or disconnect */
+connectFloating.addEventListener('click', async ()=>{
+  if (userAddress) {
+    if (!confirm('Disconnect wallet?')) return;
+    await disconnectWallet(false);
+  } else {
+    setBusy(connectFloating, true);
+    try { await connectWallet(); } finally { setBusy(connectFloating, false); }
+  }
+});
+
+/* Hide pairing modal when user clicks outside or presses ESC */
+document.addEventListener('click', (e)=>{
+  const modal = document.getElementById('walletPairModal');
+  if (!modal) return;
+  if (modal.style.display === 'flex' && e.target === modal) hidePairingModal();
+});
+document.addEventListener('keydown', (e)=>{ if (e.key === 'Escape') hidePairingModal(); });
+
+/* =================== End connect wallet block =================== */
+  
+/* =================== CARET, SYMBOL UX =================== */
+function placeCaretAtEnd(inputEl){
+  try{ const len = (inputEl.value || '').length; inputEl.setSelectionRange(len, len); }catch(e){}
+}
+function focusAndPlaceCaretAtEnd(inputEl){
+  try{ inputEl.focus(); placeCaretAtEnd(inputEl); }catch(e){}
+}
+function hideSymbolOnFocus(side){
+  const sym = (side==='from')? $('fromSymbol') : $('toSymbol');
+  const input = (side==='from')? fromTokenInput : toTokenInput;
+  if (sym) sym.style.visibility = 'hidden';
+}
+function restoreSymbolOnBlur(side){
+  const sym = (side==='from')? $('fromSymbol') : $('toSymbol');
+  const input = (side==='from')? fromTokenInput : toTokenInput;
+  if (sym) {
+    if (!input.value || input.value.trim() === '') {
+      const addr = input.dataset.address;
+      if (addr && tokenMap.has(low(addr))) sym.textContent = tokenMap.get(low(addr)).symbol || tokenMap.get(low(addr)).name || 'Select';
+      else sym.textContent = 'Select';
+    }
+    sym.style.visibility = 'visible';
+  }
+}
+  /* Ensure blur normalization (defensive) */
+function normalizeSelectedTokenText(inputEl, chipEl) {
+  try {
+    const addr = low(inputEl.dataset.address || '');
+    if (addr && tokenMap.has(addr)) {
+      const tok = tokenMap.get(addr);
+      inputEl.value = tok.symbol || tok.name || inputEl.value || addr.slice(0,8);
+      return;
+    }
+    if (chipEl && chipEl.textContent) {
+      inputEl.value = chipEl.textContent;
+    }
+  } catch(e){}
+}
+fromToken.addEventListener('blur', ()=> { setTimeout(()=> normalizeSelectedTokenText(fromToken, fromChip), 120); });
+toToken.addEventListener('blur', ()=> { setTimeout(()=> normalizeSelectedTokenText(toToken, toChip), 120); });
+
+/* =================== SLIPPAGE UI (custom dropdown) =================== */
+function toggleSlippageList(open){
+  // guard
+  if (typeof slippageList === 'undefined' || typeof slippageDisplay === 'undefined') return;
+  if (open === undefined) open = slippageList.style.display !== 'block';
+  if (open) {
+    slippageList.style.display = 'block';
+    slippageDisplay.setAttribute('aria-expanded', 'true');
+    stopBodyScroll();
+  } else {
+    slippageList.style.display = 'none';
+    slippageDisplay.setAttribute('aria-expanded', 'false');
+    restoreBodyScroll();
+  }
+}
+
+// defensive attach
+if (typeof slippageDisplay !== 'undefined' && slippageDisplay) {
+  slippageDisplay.addEventListener('click', ()=> toggleSlippageList());
+}
+if (typeof slippageList !== 'undefined' && slippageList) {
+  const items = slippageList.querySelectorAll('.slippage-item');
+  items.forEach(it=>{
+    it.addEventListener('click', ()=>{
+      if (typeof slippageLabel !== 'undefined' && slippageLabel) {
+        slippageLabel.textContent = it.dataset.value + '%';
+      }
+      toggleSlippageList(false);
+    });
+  });
+}
+function getSelectedSlippage(){ return (typeof slippageLabel !== 'undefined' && slippageLabel ? (slippageLabel.textContent||'1%') : '1%').replace('%','').trim(); }
+
+// Close slippage list when clicking outside
+document.addEventListener('click', function (e) {
+  if (!slippageList || !slippageDisplay) return;
+
+  // if slippage list is open
+  const isOpen = slippageList.style.display === 'block';
+
+  if (!isOpen) return;
+
+  // If click is outside both the list and the button → close it
+  if (!slippageList.contains(e.target) && !slippageDisplay.contains(e.target)) {
+    toggleSlippageList(false);
+  }
+});
+  /* accessory helpers are already present above */
+
+/*
+  swapOutside MOVE behavior (not swap):
+  - Button used: element with id="swapOutside"
+  - Action: take the token selected in FROM and place it into TO, then clear FROM.
+  - Preserves UI consistency: logos, chips, amount (moved), small price/unit displays, classes.
+  - Hides suggestions and dispatches input/change events so other logic updates.
+*/
+
+(function(){
+  const $ = id => document.getElementById(id);
+  const swapBtn = $('swapOutside');
+  if (!swapBtn) {
+    console.warn('swapOutside not found');
+    return;
+  }
+
+  const fromToken = $('fromToken'), toToken = $('toToken');
+  const fromAmount = $('fromAmount'), toAmount = $('toAmount');
+  const fromLogo = $('fromLogo'), toLogo = $('toLogo');
+  const fromChip = $('fromChip'), toChip = $('toChip');
+  const fromBox = $('fromBox'), toBox = $('toBox');
+  const fromSuggestions = $('fromSuggestions'), toSuggestions = $('toSuggestions');
+  const fromUsdSmall = $('fromUsdSmall'), toUsdSmall = $('toUsdSmall');
+  const fromUnitSmall = $('fromUnitSmall'), toUnitSmall = $('toUnitSmall');
+
+  function hasSelected(el){ return !!(el && el.dataset && (el.dataset.address||'').trim()); }
+
+  function swapDataset(a, b, key='address'){
+    if (!a || !b) return;
+    const ta = (a.dataset && a.dataset[key]) ? a.dataset[key] : '';
+    const tb = (b.dataset && b.dataset[key]) ? b.dataset[key] : '';
+    if (a.dataset) a.dataset[key] = tb || '';
+    if (b.dataset) b.dataset[key] = ta || '';
+  }
+
+  function swapValues(a, b){
+    if (!a || !b) return;
+    const va = a.value || '';
+    const vb = b.value || '';
+    a.value = vb;
+    b.value = va;
+  }
+
+  function swapSrc(a, b){
+    if (!a || !b) return;
+    const sa = a.src || '';
+    const sb = b.src || '';
+    a.src = sb || '';
+    b.src = sa || '';
+    a.style.display = a.src ? 'block' : 'none';
+    b.style.display = b.src ? 'block' : 'none';
+  }
+
+  function swapTextDisplay(a, b){
+    if (!a || !b) return;
+    const ta = a.textContent || '';
+    const tb = b.textContent || '';
+    a.textContent = tb || '';
+    b.textContent = ta || '';
+    a.style.display = a.textContent ? 'inline-block' : 'none';
+    b.style.display = b.textContent ? 'inline-block' : 'none';
+  }
+
+  function swapPriceDisplays(aUsd, bUsd, aUnit, bUnit){
+    if (aUsd && bUsd) {
+      const au = aUsd.textContent||'';
+      const bu = bUsd.textContent||'';
+      aUsd.textContent = bu; bUsd.textContent = au;
+      aUsd.style.display = aUsd.textContent ? 'block' : 'none';
+      bUsd.style.display = bUsd.textContent ? 'block' : 'none';
+    }
+    if (aUnit && bUnit) {
+      const au = aUnit.textContent||'';
+      const bu = bUnit.textContent||'';
+      aUnit.textContent = bu; bUnit.textContent = au;
+      aUnit.style.display = aUnit.textContent ? 'block' : 'none';
+      bUnit.style.display = bUnit.textContent ? 'block' : 'none';
+    }
+  }
+
+  function swapHasTokenClass(){
+    if (!fromBox || !toBox) return;
+    const f = fromBox.classList.contains('has-token');
+    const t = toBox.classList.contains('has-token');
+    if (f && !t) { fromBox.classList.remove('has-token'); toBox.classList.add('has-token'); }
+    else if (!f && t) { toBox.classList.remove('has-token'); fromBox.classList.add('has-token'); }
+    // if both or none: toggle both
+    else if (f && t) { /* keep */ }
+  }
+
+  function moveFromTo(srcEl, dstEl, options={moveAmount:true}){
+    // dataset
+    if (srcEl && dstEl) {
+      const val = (srcEl.dataset && srcEl.dataset.address) ? srcEl.dataset.address : '';
+      if (val) dstEl.dataset.address = val;
+      else if (dstEl.dataset) delete dstEl.dataset.address;
+    }
+    // visible value
+    if (srcEl && dstEl) {
+      dstEl.value = srcEl.value || '';
+      srcEl.value = '';
+    }
+    // amount
+    if (options.moveAmount && fromAmount && toAmount && srcEl===fromToken && dstEl===toToken) {
+      toAmount.value = fromAmount.value || '';
+      fromAmount.value = '';
+    } else if (options.moveAmount && fromAmount && toAmount && srcEl===toToken && dstEl===fromToken) {
+      fromAmount.value = toAmount.value || '';
+      toAmount.value = '';
+    }
+  }
+
+  function moveImg(src, dst){
+    if (!src || !dst) return;
+    dst.src = src.src || '';
+    dst.style.display = dst.src ? 'block' : 'none';
+    src.src = '';
+    src.style.display = 'none';
+  }
+
+  function moveChip(src, dst){
+    if (!src || !dst) return;
+    dst.textContent = src.textContent || '';
+    dst.style.display = dst.textContent ? 'inline-block' : 'none';
+    src.textContent = '';
+    src.style.display = 'none';
+  }
+
+  function clearSuggestions(){ if (fromSuggestions) fromSuggestions.style.display='none'; if (toSuggestions) toSuggestions.style.display='none'; }
+
+  function dispatchEvents(){
+    try {
+      if (fromToken) { fromToken.dispatchEvent(new Event('input',{bubbles:true})); fromToken.dispatchEvent(new Event('change',{bubbles:true})); }
+      if (toToken) { toToken.dispatchEvent(new Event('input',{bubbles:true})); toToken.dispatchEvent(new Event('change',{bubbles:true})); }
+      if (fromAmount) fromAmount.dispatchEvent(new Event('input',{bubbles:true}));
+      if (toAmount) toAmount.dispatchEvent(new Event('input',{bubbles:true}));
+    } catch(e){}
+  }
+
+  swapBtn.addEventListener('click', function(e){
+    e.preventDefault();
+
+    const fSel = hasSelected(fromToken);
+    const tSel = hasSelected(toToken);
+
+    if (fSel && tSel) {
+      // both present -> swap everything (addresses, visible text, logos, chips, amounts, small-price)
+      swapDataset(fromToken, toToken, 'address');
+      swapValues(fromToken, toToken);
+      swapSrc(fromLogo, toLogo);
+      swapTextDisplay(fromChip, toChip);
+      swapValues(fromAmount, toAmount); // swap amounts
+      swapPriceDisplays(fromUsdSmall, toUsdSmall, fromUnitSmall, toUnitSmall);
+      swapHasTokenClass();
+    } else if (fSel && !tSel) {
+      // only from -> move to to, clear from
+      moveFromTo(fromToken, toToken, {moveAmount:true});
+      moveImg(fromLogo, toLogo);
+      moveChip(fromChip, toChip);
+      if (fromBox && toBox) { fromBox.classList.remove('has-token'); toBox.classList.add('has-token'); }
+      // move price displays
+      if (fromUsdSmall && toUsdSmall) { toUsdSmall.textContent = fromUsdSmall.textContent || ''; toUsdSmall.style.display = toUsdSmall.textContent?'block':'none'; fromUsdSmall.textContent = ''; fromUsdSmall.style.display='none'; }
+      if (fromUnitSmall && toUnitSmall) { toUnitSmall.textContent = fromUnitSmall.textContent || ''; toUnitSmall.style.display = toUnitSmall.textContent?'block':'none'; fromUnitSmall.textContent=''; fromUnitSmall.style.display='none'; }
+    } else if (!fSel && tSel) {
+      // only to -> move to from, clear to
+      moveFromTo(toToken, fromToken, {moveAmount:true});
+      moveImg(toLogo, fromLogo);
+      moveChip(toChip, fromChip);
+      if (toBox && fromBox) { toBox.classList.remove('has-token'); fromBox.classList.add('has-token'); }
+      if (toUsdSmall && fromUsdSmall) { fromUsdSmall.textContent = toUsdSmall.textContent || ''; fromUsdSmall.style.display = fromUsdSmall.textContent?'block':'none'; toUsdSmall.textContent=''; toUsdSmall.style.display='none'; }
+      if (toUnitSmall && fromUnitSmall) { fromUnitSmall.textContent = toUnitSmall.textContent || ''; fromUnitSmall.style.display = fromUnitSmall.textContent?'block':'none'; toUnitSmall.textContent=''; toUnitSmall.style.display='none'; }
+    } else {
+      // nothing selected in either -> no-op
+      return;
+    }
+
+    clearSuggestions();
+    dispatchEvents();
+  });
+
+})(); 
+</script>
+  <!-- WALLET PAIRING MODAL (QR + deep-links) -->
+<div id="walletPairModal" style="display:none;position:fixed;inset:0;z-index:99999;align-items:center;justify-content:center;background:linear-gradient(180deg, rgba(0,0,0,0.65), rgba(0,0,0,0.8));">
+  <div style="width:94%;max-width:520px;background:#0f0d14;border-radius:18px;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,0.6);color:#fff;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="font-weight:800;font-size:18px">WalletConnect</div>
+      <button onclick="hidePairingModal()" aria-label="Close" style="background:transparent;border:0;color:rgba(255,255,255,0.7);font-size:18px;padding:6px;border-radius:8px">✕</button>
+    </div>
+
+    <div style="display:flex;gap:14px;align-items:flex-start;">
+      <div class="pair-qr" style="flex:0 0 52%;background:#050308;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:center;">
+        <img src="" alt="QR" style="width:100%;height:auto;border-radius:8px;max-width:100%;">
+      </div>
+
+      <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:13px;color:rgba(255,255,255,0.7)">Scan this QR code with your phone or open one of the wallet apps below</div>
+        <a class="pair-link" href="#" style="display:block;word-break:break-all;background:#07060a;padding:8px;border-radius:8px;border:1px dashed rgba(255,255,255,0.03);font-size:12px;color:#ddd;text-decoration:none;max-height:84px;overflow:auto;"></a>
+        <div style="display:flex;gap:8px;">
+          <button class="pair-copy" style="flex:0 0 auto;background:#1e1730;border:0;padding:8px 10px;border-radius:10px;color:#fff">Copy link</button>
+          <button onclick="hidePairingModal()" style="flex:1;background:transparent;border:1px solid rgba(255,255,255,0.04);padding:8px;border-radius:10px;color:rgba(255,255,255,0.8)">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;font-weight:700">Open in wallet</div>
+    <div class="pair-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px;"></div>
+
+    <div style="margin-top:10px;font-size:12px;color:rgba(255,255,255,0.5)">If your wallet does not open automatically, copy the link above and paste it into your wallet's "Connect" or "WalletConnect" field.</div>
+  </div>
+</div>
+</body>  
+</html>
