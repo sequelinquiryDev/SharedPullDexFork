@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getTopTokens, getCgStatsMap } from '@/lib/tokenService';
 import { formatUSD, low } from '@/lib/config';
 
@@ -8,10 +8,15 @@ interface TickerToken {
   price: number;
   change: number;
   logoURI: string;
+  lastShown: number;
+  marketCap: number;
+  volume: number;
 }
 
 export function PriceTicker() {
   const [tokens, setTokens] = useState<TickerToken[]>([]);
+  const tokenPoolRef = useRef<Map<string, TickerToken>>(new Map());
+  const lastRotationRef = useRef<number>(Date.now());
 
   useEffect(() => {
     const loadTickerTokens = () => {
@@ -33,9 +38,31 @@ export function PriceTicker() {
             logoURI: token.logoURI || freshStats?.image || '',
             marketCap,
             volume,
+            lastShown: tokenPoolRef.current.get(token.symbol)?.lastShown || 0,
           };
         })
         .filter((t) => t.price > 0 && t.change !== null);
+
+      // Update pool
+      withStats.forEach(t => tokenPoolRef.current.set(t.symbol, t));
+
+      // Evaluate rotation every 10 minutes
+      const now = Date.now();
+      if (now - lastRotationRef.current > 600000) {
+        lastRotationRef.current = now;
+        
+        // Re-evaluate tokens for next show
+        const eligible = Array.from(tokenPoolRef.current.values()).map(t => ({
+          ...t,
+          score: (t.marketCap * 0.5) + (Math.abs(t.change) * t.volume * 100),
+        }));
+        
+        eligible.sort((a, b) => b.score - a.score);
+        eligible.slice(0, 15).forEach(t => {
+          t.lastShown = now;
+          tokenPoolRef.current.set(t.symbol, t);
+        });
+      }
 
       // Top 7 by market cap
       const topByMarketCap = [...withStats]
@@ -47,7 +74,6 @@ export function PriceTicker() {
         .sort((a, b) => Math.abs(b.change) - Math.abs(a.change))
         .slice(0, 8);
 
-      // Combine and deduplicate
       const combined = [...topByMarketCap];
       const seenSymbols = new Set(combined.map((t) => t.symbol));
       
@@ -58,23 +84,18 @@ export function PriceTicker() {
         }
       });
 
-      setTokens(combined.map(({ symbol, price, change, logoURI }) => ({
-        symbol,
-        price,
-        change,
-        logoURI,
-      })));
+      setTokens(combined);
     };
 
     loadTickerTokens();
-    const interval = setInterval(loadTickerTokens, 10000); // Refresh every 10s
+    const priceInterval = setInterval(loadTickerTokens, 8000); // Update prices every 8s
 
-    return () => clearInterval(interval);
+    return () => clearInterval(priceInterval);
   }, []);
 
   if (tokens.length === 0) return null;
 
-  // Duplicate tokens for seamless loop
+  // Triple tokens for seamless infinite loop
   const displayTokens = [...tokens, ...tokens, ...tokens];
 
   return (

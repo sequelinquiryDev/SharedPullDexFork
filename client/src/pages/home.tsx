@@ -106,7 +106,7 @@ export default function Home() {
     return () => clearTimeout(debounce);
   }, [fromToken, toToken, fromAmount, slippage]);
 
-  // Refresh prices periodically (every 5 seconds for better UX)
+  // Refresh prices periodically (every 8 seconds for real-time trading)
   useEffect(() => {
     if (!fromToken && !toToken) return;
 
@@ -117,7 +117,7 @@ export default function Home() {
       if (toToken) {
         getTokenPriceUSD(toToken.address, toToken.decimals).then(setToPriceUsd);
       }
-    }, 5000); // Update every 5 seconds
+    }, 8000); // Update every 8 seconds
 
     return () => clearInterval(interval);
   }, [fromToken, toToken]);

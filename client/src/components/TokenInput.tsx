@@ -69,13 +69,36 @@ export function TokenInput({
     }
   }, []);
 
+  const [placeholderText, setPlaceholderText] = useState('');
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchQuery(value);
 
+    // Show placeholder of what was removed
+    if (selectedToken && value.length < selectedToken.symbol.length) {
+      setPlaceholderText(selectedToken.symbol.slice(value.length));
+    } else {
+      setPlaceholderText('');
+    }
+
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
+
+    // Clear typing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Set new typing timeout for normalization
+    typingTimeoutRef.current = setTimeout(() => {
+      if (selectedToken && value.trim() === '') {
+        setSearchQuery(selectedToken.symbol);
+        setPlaceholderText('');
+      }
+    }, 2000);
 
     searchTimeoutRef.current = setTimeout(() => {
       handleSearch(value.trim().toLowerCase());
@@ -90,8 +113,10 @@ export function TokenInput({
     // Normalize to selected token when user leaves input
     if (selectedToken) {
       setSearchQuery(selectedToken.symbol);
+      setPlaceholderText('');
     } else {
       setSearchQuery('');
+      setPlaceholderText('');
     }
     setShowSuggestions(false);
   };
@@ -125,7 +150,7 @@ export function TokenInput({
     };
   }, [showSuggestions]);
 
-  // Live price updates for suggestions (every 5s)
+  // Live price updates for suggestions (every 8s with smart caching)
   useEffect(() => {
     if (!showSuggestions || suggestions.length === 0) return;
 
@@ -143,7 +168,7 @@ export function TokenInput({
       );
     };
 
-    const priceInterval = setInterval(updatePrices, 5000);
+    const priceInterval = setInterval(updatePrices, 8000); // Every 8s
     return () => clearInterval(priceInterval);
   }, [showSuggestions, suggestions.length]);
 
@@ -198,7 +223,7 @@ export function TokenInput({
           </div>
         )}
 
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, width: '100%', position: 'relative' }}>
           <input
             ref={inputRef}
             type="text"
@@ -219,6 +244,21 @@ export function TokenInput({
             }}
             data-testid={`input-token-search-${side}`}
           />
+          {placeholderText && (
+            <span
+              style={{
+                position: 'absolute',
+                left: `calc(10px + ${searchQuery.length * 8.4}px)`,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'rgba(255, 255, 255, 0.25)',
+                pointerEvents: 'none',
+                fontSize: '14px',
+              }}
+            >
+              {placeholderText}
+            </span>
+          )}
         </div>
 
         <div style={{ marginLeft: '8px', minWidth: '120px' }}>

@@ -223,6 +223,23 @@ async function fetchDexscreenerPrice(addr: string): Promise<number | null> {
   }
 }
 
+async function fetchGeckoTerminalPrice(addr: string): Promise<number | null> {
+  try {
+    const url = `https://api.geckoterminal.com/api/v2/networks/polygon_pos/tokens/${addr}`;
+    const res = await fetchWithTimeout(url, {}, 3000);
+    if (!res.ok) throw new Error('geckoterminal non-ok');
+    const j = await res.json();
+    const price = j?.data?.attributes?.price_usd;
+    if (price && typeof price === 'string') {
+      const v = Number(price);
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function getTokenPriceUSD(address: string, decimals = 18): Promise<number | null> {
   if (!address) return null;
   const addr = low(address);
@@ -232,26 +249,40 @@ export async function getTokenPriceUSD(address: string, decimals = 18): Promise<
   }
 
   const sources = [
-    { name: '0x', fn: () => fetch0xPrice(addr), priority: 1 },
-    { name: '1inch', fn: () => fetch1InchQuotePrice(addr, decimals), priority: 2 },
-    { name: 'coingecko_simple', fn: () => fetchCoingeckoSimple(addr), priority: 3 },
-    { name: 'dexscreener', fn: () => fetchDexscreenerPrice(addr), priority: 4 },
+    { name: '0x', fn: () => fetch0xPrice(addr), priority: 1, retries: 2 },
+    { name: '1inch', fn: () => fetch1InchQuotePrice(addr, decimals), priority: 2, retries: 2 },
+    { name: 'coingecko_simple', fn: () => fetchCoingeckoSimple(addr), priority: 3, retries: 1 },
+    { name: 'dexscreener', fn: () => fetchDexscreenerPrice(addr), priority: 4, retries: 1 },
+    { name: 'geckoterminal', fn: () => fetchGeckoTerminalPrice(addr), priority: 5, retries: 1 },
   ];
 
   let best: { price: number; priority: number } | null = null;
 
-  const results = await Promise.allSettled(sources.map((s) => s.fn()));
-
-  results.forEach((result, idx) => {
-    if (result.status === 'fulfilled' && result.value) {
-      const val = result.value;
-      if (Number.isFinite(val) && val > 0) {
-        if (!best || sources[idx].priority < best.priority) {
-          best = { price: val, priority: sources[idx].priority };
+  // Try each source with retries
+  for (const source of sources) {
+    for (let attempt = 0; attempt <= source.retries; attempt++) {
+      try {
+        const price = await source.fn();
+        if (price && Number.isFinite(price) && price > 0) {
+          if (!best || source.priority < best.priority) {
+            best = { price, priority: source.priority };
+            break; // Found good price, move to next source
+          }
+        }
+      } catch (e) {
+        if (attempt === source.retries) {
+          console.warn(`${source.name} failed after ${source.retries + 1} attempts`);
+        }
+        // Wait before retry
+        if (attempt < source.retries) {
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
     }
-  });
+    
+    // If we found a high-priority price, stop trying other sources
+    if (best && best.priority <= 2) break;
+  }
 
   const finalPrice = best?.price ?? null;
   priceCache.set(addr, { price: finalPrice, ts: Date.now() });

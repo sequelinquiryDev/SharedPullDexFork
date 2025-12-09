@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useAccount } from 'wagmi';
 import { fetchMessages, sendMessage, subscribeToMessages } from '@/lib/supabaseClient';
 
 interface Message {
@@ -9,6 +10,7 @@ interface Message {
 }
 
 export function ChatPanel() {
+  const { address, isConnected } = useAccount();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -23,8 +25,13 @@ export function ChatPanel() {
     const stored = localStorage.getItem('nola_chat_username');
     if (stored) {
       setUsername(stored);
+    } else if (isConnected && address) {
+      // Use wallet address as username
+      const walletUsername = `${address.slice(0, 6)}...${address.slice(-4)}`;
+      setUsername(walletUsername);
+      localStorage.setItem('nola_chat_username', walletUsername);
     }
-  }, []);
+  }, [isConnected, address]);
 
   useEffect(() => {
     if (isOpen && username) {
@@ -38,10 +45,10 @@ export function ChatPanel() {
         });
       });
 
-      // Fallback polling every 350ms for reliability
+      // Ultra-fast polling every 30ms (0.03s) for real-time experience
       const pollInterval = setInterval(() => {
         loadMessages();
-      }, 350);
+      }, 30);
 
       return () => {
         if (unsubscribe) unsubscribe();
@@ -91,7 +98,7 @@ export function ChatPanel() {
 
   const handleSetUsername = () => {
     const name = (document.getElementById('username-input') as HTMLInputElement)?.value.trim();
-    if (name) {
+    if (name && name.length >= 4) {
       setUsername(name);
       localStorage.setItem('nola_chat_username', name);
       setShowUsernameModal(false);
@@ -171,8 +178,14 @@ export function ChatPanel() {
             onKeyPress={handleKeyPress}
             data-testid="input-chat-message"
           />
-          <button onClick={handleSend} disabled={isSending} data-testid="button-send-chat">
-            {isSending ? '...' : 'NOLA'}
+          <button onClick={handleSend} disabled={isSending} data-testid="button-send-chat" className="chat-send-arrow">
+            {isSending ? (
+              <span className="btn-spinner" style={{ width: '14px', height: '14px' }} />
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            )}
           </button>
         </div>
       </div>
@@ -183,14 +196,17 @@ export function ChatPanel() {
             <h3 style={{ color: '#e0b3ff' }}>Choose a Username</h3>
             <input
               id="username-input"
-              placeholder="Enter name"
+              placeholder="Enter name (min 4 chars)"
               onKeyPress={(e) => {
                 if (e.key === 'Enter') handleSetUsername();
               }}
               data-testid="input-username"
+              minLength={4}
             />
-            <button onClick={handleSetUsername} data-testid="button-confirm-username">
-              Say NOLA
+            <button onClick={handleSetUsername} data-testid="button-confirm-username" className="themed-arrow-btn">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
             </button>
           </div>
         </div>

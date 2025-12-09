@@ -8,6 +8,7 @@ import { Logo } from '@/components/Logo';
 import { PriceTicker } from '@/components/PriceTicker';
 import { ConnectButton } from '@/components/ConnectButton';
 import { ChatPanel } from '@/components/ChatPanel';
+import { ToolsButton } from '@/components/ToolsButton';
 import { Footer } from '@/components/Footer';
 import { ToastContainer } from '@/components/Toast';
 import Home from '@/pages/home';
@@ -32,6 +33,7 @@ function App() {
         <ConnectButton />
         <Router />
         <ChatPanel />
+        <ToolsButton />
         <Footer />
         <ToastContainer />
       </QueryClientProvider>
