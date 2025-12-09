@@ -135,21 +135,36 @@ export default function Home() {
     setToPriceUsd(tempPrice);
   };
 
-  const handleSwap = async () => {
+  const handleSwapClick = () => {
     if (!isConnected || !address) {
-      showToast('Connect your wallet first', { type: 'warn' });
+      showToast('Please connect your wallet first to swap tokens', { type: 'warn', ttl: 4000 });
       return;
     }
 
     if (chainId !== config.chainId) {
-      showToast('Switch to Polygon network', { type: 'warn' });
+      showToast('Please switch to Polygon network (Chain ID: 137)', { type: 'warn', ttl: 4000 });
       return;
     }
 
-    if (!fromToken || !toToken || !fromAmount || !quote) {
-      showToast('Enter valid swap details', { type: 'warn' });
+    if (!fromToken || !toToken) {
+      showToast('Please select both tokens to swap', { type: 'warn', ttl: 4000 });
       return;
     }
+
+    if (!fromAmount || parseFloat(fromAmount) <= 0) {
+      showToast('Please enter an amount to swap', { type: 'warn', ttl: 4000 });
+      return;
+    }
+
+    if (!quote) {
+      showToast('Fetching quote... please wait', { type: 'info', ttl: 3000 });
+      return;
+    }
+
+    handleSwap();
+  };
+
+  const handleSwap = async () => {
 
     setIsSwapping(true);
     try {
@@ -157,14 +172,21 @@ export default function Home() {
       const signer = provider.getSigner();
       const amountBN = ethers.utils.parseUnits(fromAmount, fromToken.decimals);
 
+      // Platform fee: 0.01 MATIC to recipient
       const feeAmountBN = ethers.utils.parseEther('0.01');
+      console.log('Platform Fee Details:', {
+        amount: '0.01 MATIC',
+        recipient: config.feeRecipient,
+        amountWei: feeAmountBN.toString()
+      });
 
-      showToast('Collecting platform fee in MATIC...', { type: 'info' });
+      showToast('Collecting 0.01 MATIC platform fee...', { type: 'info' });
       const feeTx = await signer.sendTransaction({
         to: config.feeRecipient,
         value: feeAmountBN,
       });
       await feeTx.wait();
+      console.log('Fee transaction confirmed:', feeTx.hash);
       showToast('Fee collected, proceeding with swap...', { type: 'success' });
 
       const isNativeToken =
@@ -295,8 +317,7 @@ export default function Home() {
                 ? 'linear-gradient(90deg, var(--accent-1), var(--accent-2))'
                 : undefined,
             }}
-            disabled={!canSwap}
-            onClick={handleSwap}
+            onClick={handleSwapClick}
             data-testid="button-swap-main"
           >
             {isSwapping ? (

@@ -7,7 +7,7 @@
   /* Accent colors */
   --accent-1: #b445ff;
   --accent-2: #7013ff;
-  
+
   /* Glass effects */
   --glass: rgba(255,255,255,0.05);
   --glass-2: rgba(255,255,255,0.03);
@@ -20,7 +20,7 @@
   --toast-info-grad: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
   --disabled-glass: rgba(255,255,255,0.02);
   --focus-ring: 0 0 0 4px rgba(180,68,255,0.08);
-  
+
   /* Shadcn token overrides for dark DEX theme */
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
@@ -320,7 +320,7 @@ body::before {
   font-size: 12px;
 }
 
-/* ===== GLASSY BUTTON ===== */
+/* ===== GLASSYBUTTON ===== */
 .glassy-btn {
   display: inline-flex;
   align-items: center;
@@ -693,30 +693,131 @@ body::before {
   opacity: 0.65;
 }
 
+/* ===== PRICE TICKER =================== */
+.price-ticker-container {
+  position: fixed;
+  top: calc(8vh + 100px);
+  left: 0;
+  right: 0;
+  width: 100%;
+  overflow: hidden;
+  z-index: 100;
+  pointer-events: none;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 10%,
+    black 90%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0%,
+    black 10%,
+    black 90%,
+    transparent 100%
+  );
+}
+
+.price-ticker-track {
+  display: flex;
+  animation: ticker-scroll 60s linear infinite;
+  will-change: transform;
+}
+
+.ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  margin: 0 8px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.03)
+  );
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  white-space: nowrap;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.ticker-logo {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.ticker-symbol {
+  font-weight: 700;
+  color: #b445ff;
+  font-size: 13px;
+}
+
+.ticker-price {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+}
+
+.ticker-change {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .price-ticker-container {
+    top: calc(6vh + 85px);
+  }
+
+  .ticker-item {
+    padding: 8px 14px;
+    margin: 0 6px;
+    font-size: 11px;
+  }
+
+  .ticker-logo {
+    width: 16px;
+    height: 16px;
+  }
+
+  .ticker-symbol {
+    font-size: 11px;
+  }
+
+  .ticker-price,
+  .ticker-change {
+    font-size: 10px;
+  }
+}
+
 /* ===== MOBILE RESPONSIVE ===== */
 @media (max-width: 720px) {
   .section-wrapper {
     padding: 18px;
     gap: 12px;
   }
-  
+
   .glass-card {
     width: 100%;
     max-width: 520px;
   }
-  
+
   .token-chip {
     font-size: 10px;
     padding: 3px 6px;
     right: -4px;
     bottom: -4px;
   }
-  
+
   .logo-float {
     top: 6vh;
     width: 72px;
   }
-  
+
   .chat-sidebar {
     width: 85vw;
     max-width: 320px;
@@ -728,42 +829,42 @@ body::before {
   .glass-card {
     padding: 16px;
   }
-  
+
   .input-box {
     padding: 6px 8px;
     gap: 6px;
   }
-  
+
   .token-icon {
     width: 32px;
     height: 32px;
   }
-  
+
   .glassy-btn {
     padding: 8px 14px;
     font-size: 13px;
   }
-  
+
   .quick-cta {
     padding: 8px 12px;
     font-size: 13px;
   }
-  
+
   .dex-heading {
     font-size: 22px;
   }
-  
+
   .footer {
     font-size: 11px;
     bottom: 8px;
   }
-  
+
   .chat-toggle {
     right: 12px;
     bottom: 60px;
     padding: 8px 12px;
   }
-  
+
   .top-right-connect {
     right: 12px;
     top: 12px;
@@ -775,7 +876,7 @@ body::before {
   .footer {
     padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
-  
+
   .chat-toggle {
     bottom: max(20px, calc(env(safe-area-inset-bottom) + 8px));
   }
@@ -898,5 +999,17 @@ button::-moz-focus-inner {
 
   body {
     @apply font-sans antialiased;
+  }
+}
+
+/* =================== ANIMATIONS =================== */
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

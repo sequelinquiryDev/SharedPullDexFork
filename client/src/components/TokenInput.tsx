@@ -50,12 +50,19 @@ export function TokenInput({
     try {
       const results = await searchTokens(query);
       const cgStats = getCgStatsMap();
-      const withPrices = results.slice(0, 12).map((token) => {
+      
+      // Map with fresh stats
+      const withPrices = results.map((token) => {
         const stats = cgStats.get(low(token.symbol)) || cgStats.get(low(token.name)) || null;
         const price = stats?.price ?? null;
-        return { token, stats, price };
+        const marketCap = stats?.price && stats?.volume24h ? (stats.price * stats.volume24h * 1000) : 0;
+        return { token, stats, price, marketCap };
       });
-      setSuggestions(withPrices);
+      
+      // Sort by market cap (top 7) then by remaining
+      withPrices.sort((a, b) => b.marketCap - a.marketCap);
+      
+      setSuggestions(withPrices.slice(0, 15));
       setShowSuggestions(true);
     } finally {
       setLoading(false);
@@ -117,6 +124,28 @@ export function TokenInput({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showSuggestions]);
+
+  // Live price updates for suggestions (every 5s)
+  useEffect(() => {
+    if (!showSuggestions || suggestions.length === 0) return;
+
+    const updatePrices = () => {
+      const cgStats = getCgStatsMap();
+      setSuggestions((prev) =>
+        prev.map((item) => {
+          const stats = cgStats.get(low(item.token.symbol)) || cgStats.get(low(item.token.name)) || null;
+          return {
+            ...item,
+            stats,
+            price: stats?.price ?? null,
+          };
+        })
+      );
+    };
+
+    const priceInterval = setInterval(updatePrices, 5000);
+    return () => clearInterval(priceInterval);
+  }, [showSuggestions, suggestions.length]);
 
   useEffect(() => {
     return () => {

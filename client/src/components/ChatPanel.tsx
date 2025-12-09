@@ -29,6 +29,8 @@ export function ChatPanel() {
   useEffect(() => {
     if (isOpen && username) {
       loadMessages();
+      
+      // Real-time subscription for instant updates
       const unsubscribe = subscribeToMessages((newMessage) => {
         setMessages((prev) => {
           if (prev.some((m) => m.id === newMessage.id)) return prev;
@@ -36,8 +38,14 @@ export function ChatPanel() {
         });
       });
 
+      // Fallback polling every 350ms for reliability
+      const pollInterval = setInterval(() => {
+        loadMessages();
+      }, 350);
+
       return () => {
         if (unsubscribe) unsubscribe();
+        clearInterval(pollInterval);
       };
     }
   }, [isOpen, username]);
