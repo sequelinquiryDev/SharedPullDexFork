@@ -1,0 +1,34 @@
+Activate your full potential,  Every thing looks great except little few things i wìll list it in points , if you did them all say i did them all
+
+
+1/ ( the token scroll glass you made, move it to sit above the exchange container in the midway under the logo 
+it should have animation by (Infiniti automatically motion of the coins scrolls) and the refresh mechanism for the listed token follows ( evaluating only tokens leaved the screen from the edge , if it deserves to be shown for other 10 minutes again or not ?, But keep the "tokens" within it keeping their normal "refreshs" prices & 24h% moves, along side with the suggestion list 
+
+
+
+ 2/I want you also to make (prices and 24h%move) higher refresh rhythm, like every 8 sec.
+So traders can experience real time price 
+
+
+ 3/for the chat, in the "user name" message pop up remove the enter button text ( Say NOLA) PUT (themed arrow that indicates enter) instead, and make sure at least 4 characters in the input of the user name. but if user is connected through the appkit and have user name then ,  (SKIP USER NAME ASK AND use THE APPKIT USER NAME TO MAKE HIM DIRECTLY ABLE TO CHAT)
+
+
+4/ Unfortunately chat it fetchs new messages in 0.3 sec right now , BUT KEEP it "0.03 sec ", is it frendly for supabase!? If not make it 0.05sec, If it 0.03sec too much freindly,  make it 0.003 sec,or 0.009 . 
+
+5/ 
+5/in the input of the message the send button (NOLA) change it to match the (themed arrow you created for user namer enter) in step 3 , and MAKE SURE THAT THE CHAT SIDE BAR AND  PUPLIC CHAT BUTTON IS FLEXIBLE AND FULLY AUTO RESIZABLITY FOR DIFFERENT MODERN PHONE DEVICES AND SCREEN SIZES ) so the layout dont get messy in other phones.
+
+
+
+6/make the (prices and 24h% moves) of the suggestions list , and the prices and 24h% of the tokens in the (tokens scrolling) update every 8sec with gaurds and cach ,
+
+7/also enhance how the suggestions list fetch the prices , inculed smart algorithms for the fall back mechanisms, and for automatically try again 
+Also add other free source (GLOBAL DEX OR API YOU KNOW IT put it in ) to provid current prices , keep it as a third fall back last option if price was not fetched "-" ., smooth scroll in the suggestions list , with smart ux., maybe there is some problems with detecting prices , because some coins faild to load.
+ 
+
+8/Add very small little square button it themed ONLY thing is sculpture inspired by the picture i provided and this '🖥' " but make our theme touch my smart love" , the new very samall square 1:1button sits in the left but down in the page mirrors the "puplic chat" button in the right slightly above it is line , the button function is smoothly it opens square screen ifram , FULLY_AUTO_RESIZEABILITY_FOR_DIFFERENT_COMMON_PHONE_DEVISES) slide in to the hame page smoothly , and opens very smoothly and professional horizontal iframe 16:9 to https//:nol.pages.dec/new , if user click in the opened ifram , then it redirects him to a new tab for it . If the user click any where out side the iframe,  then it close the ifram 
+The boundaries and edgies of this i frame has professional fade edges and professional look. 
+EVERYY 15 SEC (A TEXT (NOLA TOOLS soon) ANIMATION POP UP FROM THE BUTTON, and sits alongside it , for 5 sec and then smoothly return back inside , but if the iframe is opened, then dismiss the text animation.
+
+
+9/ the input in (from,to) tokens the search bar should leave a placeholder of the removed characters while the user typing,  but if he left typing then text normalize as we already established normalization
