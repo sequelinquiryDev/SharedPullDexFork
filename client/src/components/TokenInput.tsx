@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap } from '@/lib/tokenService';
 import { formatUSD, low, isAddress } from '@/lib/config';
@@ -50,7 +49,7 @@ export function TokenInput({
     try {
       const results = await searchTokens(query);
       const cgStats = getCgStatsMap();
-      
+
       // Map with fresh stats
       const withPrices = results.map((token) => {
         const stats = cgStats.get(low(token.symbol)) || cgStats.get(low(token.name)) || null;
@@ -58,10 +57,10 @@ export function TokenInput({
         const marketCap = stats?.price && stats?.volume24h ? (stats.price * stats.volume24h * 1000) : 0;
         return { token, stats, price, marketCap };
       });
-      
+
       // Sort by market cap (top 7) then by remaining
       withPrices.sort((a, b) => b.marketCap - a.marketCap);
-      
+
       setSuggestions(withPrices.slice(0, 15));
       setShowSuggestions(true);
     } finally {
@@ -270,57 +269,42 @@ export function TokenInput({
               <div
                 key={token.address}
                 className="suggestion-item"
-                onClick={() => handleSelectToken(token)}
-                data-testid={`suggestion-item-${token.symbol}`}
+                onClick={() => {
+                  handleSelectToken(token);
+                  setShowSuggestions(false);
+                  setSearchQuery('');
+                }}
+                style={{ cursor: 'pointer', userSelect: 'none' }}
               >
                 <div className="suggestion-left">
-                  <img
-                    src={token.logoURI || stats?.image || getPlaceholderImage()}
-                    alt={token.symbol}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = getPlaceholderImage();
-                    }}
-                    style={{ width: '28px', height: '28px', borderRadius: '50%' }}
-                  />
-                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 700,
-                        fontSize: '13px',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
+                  {token.logoURI && (
+                    <img src={token.logoURI} alt={token.symbol} />
+                  )}
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '13px' }}>
                       {token.symbol}
                     </div>
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        opacity: 0.8,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
+                    <div style={{ fontSize: '11px', opacity: 0.7 }}>
                       {token.name}
                     </div>
-                    {stats?.change !== null && stats?.change !== undefined && (
-                      <div
-                        style={{
-                          fontSize: '11px',
-                          marginTop: '4px',
-                          opacity: 0.9,
-                          color: stats.change >= 0 ? '#9ef39e' : '#ff9e9e',
-                        }}
-                      >
-                        {stats.change >= 0 ? '+' : ''}
-                        {stats.change.toFixed(2)}%
-                      </div>
-                    )}
                   </div>
                 </div>
-                <div className="suggestion-price-pill">{price ? formatUSD(price) : '—'}</div>
+                <div className="suggestion-price-pill">
+                  <div style={{ fontSize: '12px', fontWeight: 700 }}>
+                    {token.currentPrice ? `$${token.currentPrice.toFixed(4)}` : '—'}
+                  </div>
+                  {typeof token.priceChange24h === 'number' && (
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        color: token.priceChange24h >= 0 ? '#9ef39e' : '#ff9e9e',
+                      }}
+                    >
+                      {token.priceChange24h >= 0 ? '+' : ''}
+                      {token.priceChange24h.toFixed(2)}%
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           )}

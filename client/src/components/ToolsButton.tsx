@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 
 export function ToolsButton() {
@@ -40,6 +39,10 @@ export function ToolsButton() {
     };
   }, [isOpen]);
 
+  const handleIframeClick = () => {
+    window.open('https://nol.pages.dev/snap', '_blank');
+  };
+
   return (
     <>
       <div
@@ -53,7 +56,7 @@ export function ToolsButton() {
           <line x1="8" y1="21" x2="16" y2="21"/>
           <line x1="12" y1="17" x2="12" y2="21"/>
         </svg>
-        
+
         <div className={`tools-text ${showText ? 'show' : ''}`}>
           soon nol tools
         </div>
@@ -62,12 +65,11 @@ export function ToolsButton() {
       {isOpen && (
         <div className="tools-iframe-container" ref={iframeRef}>
           <iframe
-            src="https://nol.pages.dev/new"
-            title="NOLA Tools"
+            src="https://nol.pages.dev/snap"
             className="tools-iframe"
-            onClick={(e) => {
-              window.open('https://nol.pages.dev/new', '_blank');
-            }}
+            title="NOLA Tools"
+            onClick={handleIframeClick}
+            sandbox="allow-scripts allow-same-origin"
           />
         </div>
       )}

@@ -7,6 +7,7 @@ import { ParticleBackground } from '@/components/ParticleBackground';
 import { Logo } from '@/components/Logo';
 import { PriceTicker } from '@/components/PriceTicker';
 import { ConnectButton } from '@/components/ConnectButton';
+import { SwitchChainButton } from '@/components/SwitchChainButton';
 import { ChatPanel } from '@/components/ChatPanel';
 import { ToolsButton } from '@/components/ToolsButton';
 import { Footer } from '@/components/Footer';
@@ -32,6 +33,7 @@ function App() {
         <Logo />
         <PriceTicker />
         <ConnectButton />
+        <SwitchChainButton />
         <CookiesPopup />
         <Router />
         <ChatPanel />

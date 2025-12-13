@@ -273,6 +273,8 @@ export default function Home() {
 
   return (
     <div className="section-wrapper">
+      <TokenSearchBar onTokenSelect={handleSearchTokenSelect} />
+
       <div
         className="glass-card card-entrance"
         style={{
@@ -284,8 +286,6 @@ export default function Home() {
         <h1 className="dex-heading" data-testid="text-heading">
           NOLA Exchange
         </h1>
-
-        <TokenSearchBar onTokenSelect={handleSearchTokenSelect} />
 
         <TokenInput
           side="from"

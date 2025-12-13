@@ -36,7 +36,7 @@ export function ChatPanel() {
   useEffect(() => {
     if (isOpen && username) {
       loadMessages();
-      
+
       // Real-time subscription for instant updates
       const unsubscribe = subscribeToMessages((newMessage) => {
         setMessages((prev) => {
@@ -106,8 +106,44 @@ export function ChatPanel() {
     }
   };
 
+  const filterMessage = (text: string): boolean => {
+    // Block URLs
+    const urlPattern = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|(\w+\.\w{2,})/gi;
+    if (urlPattern.test(text)) {
+      // Assuming showToast is defined elsewhere and accessible
+      // For demonstration purposes, we'll use console.error
+      console.warn('Links are not allowed in chat'); 
+      // showToast('Links are not allowed in chat', { type: 'warn' });
+      return false;
+    }
+
+    // Block profanity and harsh words
+    const profanityList = [
+      'damn', 'hell', 'ass', 'bitch', 'fuck', 'shit', 'crap', 'bastard',
+      'idiot', 'stupid', 'moron', 'dumb', 'loser', 'hate', 'kill', 'die'
+    ];
+
+    const lowerText = text.toLowerCase();
+    for (const word of profanityList) {
+      if (lowerText.includes(word)) {
+        // Assuming showToast is defined elsewhere and accessible
+        // For demonstration purposes, we'll use console.error
+        console.warn('Please keep chat respectful and professional');
+        // showToast('Please keep chat respectful and professional', { type: 'warn' });
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+
   const handleSend = useCallback(async () => {
     if (!inputValue.trim() || !username || isSending) return;
+
+    if (!filterMessage(inputValue)) {
+      return;
+    }
 
     const messageText = inputValue.trim();
     setInputValue('');

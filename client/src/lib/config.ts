@@ -21,11 +21,28 @@ export const config = {
   priceCacheTtl: Number(import.meta.env.VITE_PRICE_CACHE_TTL || 10000),
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL || '',
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
-  logoUrl: 'https://nol.pages.dev/Link/logo.png',
+  logoUrl: 'https://nol.pages.dev/logoapp.png',
   siteName: import.meta.env.VITE_SITE_NAME || 'NOLA Exchange',
   explorerUrl: import.meta.env.VITE_EXPLORER_URL || 'https://polygonscan.com',
   defaultSlippage: Number(import.meta.env.VITE_DEFAULT_SLIPPAGE) || 1,
   slippageOptions: (import.meta.env.VITE_SLIPPAGE_OPTIONS || '0.5,1,2,3').split(',').map(Number),
+};
+
+export const ethereumConfig = {
+  chainId: 1,
+  chainIdHex: '0x1',
+  chainName: 'Ethereum',
+  coingeckoChain: 'ethereum',
+  rpcUrls: [
+    'https://eth.llamarpc.com',
+    'https://rpc.ankr.com/eth',
+  ],
+  oneInchBase: 'https://api.1inch.io/v5.0/1',
+  zeroXBase: 'https://api.0x.org',
+  usdcAddr: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+  wethAddr: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+  explorerUrl: 'https://etherscan.io',
+  feeUsd: 1.2,
 };
 
 export const explorerTxLink = (tx: string) => `${config.explorerUrl}/tx/${tx}`;

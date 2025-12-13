@@ -4,9 +4,13 @@
 
 /* ===== NOLA DEX THEME - EXACT MATCH FROM HTML ===== */
 :root {
-  /* Accent colors */
+  /* Accent colors - Purple (Polygon) */
   --accent-1: #b445ff;
   --accent-2: #7013ff;
+  
+  /* Accent colors - Blue (Ethereum) */
+  --accent-1-eth: #4589ff;
+  --accent-2-eth: #1370ff;
 
   /* Glass effects */
   --glass: rgba(255,255,255,0.05);
@@ -102,6 +106,16 @@ body {
   scroll-behavior: smooth;
   min-height: 100vh;
   min-height: 100dvh;
+  transition: background 0.6s ease;
+}
+
+body.eth-chain {
+  background: radial-gradient(circle at center, #000c14, #001a2b 80%);
+}
+
+body.eth-chain :root {
+  --accent-1: var(--accent-1-eth);
+  --accent-2: var(--accent-2-eth);
 }
 
 #root {
@@ -667,6 +681,54 @@ body::before {
 }
 
 /* ===== TOOLS BUTTON & IFRAME ===== */
+.switch-chain-button {
+  position: fixed;
+  right: 18px;
+  top: 68px;
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, rgba(180, 68, 255, 0.15), rgba(112, 19, 255, 0.1));
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(180, 68, 255, 0.3);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 70;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(180, 68, 255, 0.2);
+  color: #b445ff;
+  font-size: 10px;
+  font-weight: 700;
+  gap: 2px;
+}
+
+.switch-chain-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(180, 68, 255, 0.3);
+  border-color: rgba(180, 68, 255, 0.5);
+}
+
+.switch-chain-button.eth-active {
+  background: linear-gradient(135deg, rgba(69, 137, 255, 0.15), rgba(19, 112, 255, 0.1));
+  border: 1px solid rgba(69, 137, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(69, 137, 255, 0.2);
+  color: #4589ff;
+}
+
+.switch-chain-arrows {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.switch-chain-label {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .tools-button {
   position: fixed;
   left: 20px;
@@ -876,11 +938,14 @@ body::before {
 
 /* ===== TOKEN SEARCH BAR =================== */
 .token-search-bar-container {
-  position: relative;
-  width: 100%;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -130px);
+  width: 90%;
   max-width: 500px;
-  margin: 0 auto 20px;
   z-index: 60;
+  pointer-events: auto;
 }
 
 .token-search-input {
@@ -943,7 +1008,7 @@ body::before {
   position: fixed;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -220px);
+  transform: translate(-50%, -180px);
   width: 90%;
   max-width: 600px;
   overflow: hidden;
@@ -1078,9 +1143,23 @@ body::before {
     width: 85vw;
     max-width: 320px;
   }
+
+  .token-search-bar-container {
+    transform: translate(-50%, -100px);
+    width: 92%;
+  }
+
+  .price-ticker-container {
+    transform: translate(-50%, -150px);
+  }
+
+  .switch-chain-button {
+    top: 60px;
+    right: 14px;
+  }
 }
 
-/* Extra small screens (320px) */
+/* Extra small screens (320px - 375px) */
 @media (max-width: 375px) {
   .glass-card {
     padding: 16px;
@@ -1107,11 +1186,11 @@ body::before {
   }
 
   .dex-heading {
-    font-size: 22px;
+    font-size: 20px;
   }
 
   .footer {
-    font-size: 11px;
+    font-size: 10px;
     bottom: 8px;
   }
 
@@ -1124,6 +1203,61 @@ body::before {
   .top-right-connect {
     right: 12px;
     top: 12px;
+  }
+
+  .token-search-bar-container {
+    transform: translate(-50%, -90px);
+    width: 95%;
+  }
+
+  .price-ticker-container {
+    transform: translate(-50%, -140px);
+  }
+
+  .switch-chain-button {
+    width: 40px;
+    height: 40px;
+    top: 56px;
+    right: 12px;
+  }
+
+  .switch-chain-arrows {
+    font-size: 14px;
+  }
+
+  .switch-chain-label {
+    font-size: 8px;
+  }
+}
+
+/* Ultra-responsive for very small phones (280px - 320px) */
+@media (max-width: 320px) {
+  .section-wrapper {
+    padding: 12px;
+  }
+
+  .glass-card {
+    padding: 14px;
+  }
+
+  .dex-heading {
+    font-size: 18px;
+    margin-bottom: 10px;
+  }
+
+  .glassy-btn {
+    padding: 7px 12px;
+    font-size: 12px;
+    min-height: 40px;
+  }
+
+  .input-box {
+    padding: 5px 7px;
+  }
+
+  .logo-float {
+    width: 60px;
+    top: 4vh;
   }
 }
 
