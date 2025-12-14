@@ -1,16 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAccount, useChainId } from 'wagmi';
 import { ethers } from 'ethers';
 import { TokenInput } from '@/components/TokenInput';
 import { SlippageControl } from '@/components/SlippageControl';
 import { showToast } from '@/components/Toast';
-import { Token, loadTokensAndMarkets, getTokenPriceUSD, getTokenMap } from '@/lib/tokenService';
+import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap } from '@/lib/tokenService';
 import { getBestQuote, executeSwap, approveToken, checkAllowance, parseSwapError, QuoteResult } from '@/lib/swapService';
-import { config, low } from '@/lib/config';
+import { config, ethereumConfig, low } from '@/lib/config';
+import { useChain, ChainType, chainConfigs } from '@/lib/chainContext';
+
+const POLYGON_DEFAULTS = {
+  fromToken: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // USDC
+  toToken: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619', // WETH
+};
+
+const ETHEREUM_DEFAULTS = {
+  fromToken: '0x0000000000000000000000000000000000000000', // ETH (native)
+  toToken: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+};
 
 export default function Home() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
+  const { chain, chainConfig, onChainChange } = useChain();
 
   const [fromToken, setFromToken] = useState<Token | null>(null);
   const [toToken, setToToken] = useState<Token | null>(null);
@@ -24,12 +36,14 @@ export default function Home() {
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [isSwapping, setIsSwapping] = useState(false);
   const [tokensLoaded, setTokensLoaded] = useState(false);
+  const previousChainRef = useRef<ChainType>(chain);
 
-  // Function to fetch prices for selected tokens
   const fetchPrices = useCallback(async () => {
+    const currentChainId = chain === 'ETH' ? 1 : 137;
+    
     if (fromToken) {
       try {
-        const price = await getTokenPriceUSD(fromToken.address, fromToken.decimals);
+        const price = await getTokenPriceUSD(fromToken.address, fromToken.decimals, currentChainId);
         setFromPriceUsd(price);
       } catch (e) {
         console.error("Failed to fetch price for fromToken:", fromToken.address, e);
@@ -41,7 +55,7 @@ export default function Home() {
 
     if (toToken) {
       try {
-        const price = await getTokenPriceUSD(toToken.address, toToken.decimals);
+        const price = await getTokenPriceUSD(toToken.address, toToken.decimals, currentChainId);
         setToPriceUsd(price);
       } catch (e) {
         console.error("Failed to fetch price for toToken:", toToken.address, e);
@@ -50,19 +64,59 @@ export default function Home() {
     } else {
       setToPriceUsd(null);
     }
-  }, [fromToken, toToken]);
+  }, [fromToken, toToken, chain]);
 
+  const setDefaultTokensForChain = useCallback(async (chainType: ChainType) => {
+    const targetChainId = chainType === 'ETH' ? 1 : 137;
+    const defaults = chainType === 'ETH' ? ETHEREUM_DEFAULTS : POLYGON_DEFAULTS;
+    
+    await loadTokensForChain(targetChainId);
+    const tokenMap = getTokenMap(targetChainId);
+    
+    const fromTokenAddr = low(defaults.fromToken);
+    const toTokenAddr = low(defaults.toToken);
+    
+    let newFromToken = tokenMap.get(fromTokenAddr);
+    let newToToken = tokenMap.get(toTokenAddr);
+    
+    if (chainType === 'ETH' && !newFromToken) {
+      newFromToken = {
+        address: '0x0000000000000000000000000000000000000000',
+        symbol: 'ETH',
+        name: 'Ethereum',
+        decimals: 18,
+        logoURI: '',
+      };
+    }
+    
+    if (newFromToken) setFromToken(newFromToken);
+    if (newToToken) setToToken(newToToken);
+  }, []);
 
   useEffect(() => {
     loadTokensAndMarkets().then(() => {
       setTokensLoaded(true);
-      const tokenMap = getTokenMap();
-      const usdc = tokenMap.get(low(config.usdcAddr));
-      const weth = tokenMap.get(low(config.wethAddr));
-      if (usdc) setFromToken(usdc);
-      if (weth) setToToken(weth);
+      setDefaultTokensForChain(chain);
     });
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = onChainChange((newChain: ChainType) => {
+      if (previousChainRef.current !== newChain) {
+        previousChainRef.current = newChain;
+        
+        setFromAmount('');
+        setToAmount('');
+        setQuote(null);
+        setFromPriceUsd(null);
+        setToPriceUsd(null);
+        
+        setDefaultTokensForChain(newChain);
+      }
+    });
+    
+    return unsubscribe;
+  }, [onChainChange, setDefaultTokensForChain]);
 
   // Fetch prices for selected tokens using the useCallback function
   useEffect(() => {
@@ -149,11 +203,6 @@ export default function Home() {
       return;
     }
 
-    if (chainId !== config.chainId) {
-      showToast('Please switch to Polygon network (Chain ID: 137)', { type: 'warn', ttl: 4000 });
-      return;
-    }
-
     if (!fromToken || !toToken) {
       showToast('Please select both tokens to swap', { type: 'warn', ttl: 4000 });
       return;
@@ -188,12 +237,11 @@ export default function Home() {
       return;
     }
 
-    if (chainId !== config.chainId) {
-      showToast('Please switch to Polygon network (Chain ID: 137)', { type: 'error', ttl: 4000 });
-      return;
-    }
-
     setIsSwapping(true);
+
+    const currentChainId = chain === 'ETH' ? 1 : 137;
+    const currentConfig = chain === 'ETH' ? ethereumConfig : config;
+    const nativeAddr = chain === 'ETH' ? '0x0000000000000000000000000000000000000000' : config.maticAddr;
 
     try {
       const amountWei = ethers.utils.parseUnits(fromAmount, fromToken.decimals);
@@ -218,8 +266,8 @@ export default function Home() {
       const provider = new ethers.providers.Web3Provider(window.ethereum as any);
       const signer = provider.getSigner();
 
-      if (fromToken.address !== config.maticAddr) {
-        const spender = bestQuote.data?.to || config.zeroXBase;
+      if (fromToken.address !== nativeAddr) {
+        const spender = bestQuote.data?.to || currentConfig.zeroXBase;
         const allowance = await checkAllowance(provider, fromToken.address, address, spender);
 
         if (allowance.lt(amountWei)) {
@@ -259,7 +307,6 @@ export default function Home() {
 
   const canSwap =
     isConnected &&
-    chainId === config.chainId &&
     fromToken &&
     toToken &&
     parseFloat(fromAmount) > 0 &&

@@ -1,4 +1,4 @@
-import { config, low, fetchWithTimeout } from './config';
+import { config, ethereumConfig, low, fetchWithTimeout } from './config';
 import { ethers } from 'ethers';
 
 export interface Token {
@@ -14,26 +14,169 @@ export interface TokenStats {
   change: number | null;
   changePeriod: string | null;
   volume24h: number;
+  marketCap: number;
   image: string;
 }
 
-let tokenList: Token[] = [];
-const tokenMap = new Map<string, Token>();
-const cgStatsMap = new Map<string, TokenStats>();
+type DataSource = 'coingecko' | 'cmc';
+const DATA_SOURCE_ROTATION_INTERVAL = 2 * 60 * 1000;
+
+let currentDataSource: DataSource = 'coingecko';
+let lastSourceRotation = Date.now();
+
+const tokenListByChain = new Map<number, Token[]>();
+const tokenMapByChain = new Map<number, Map<string, Token>>();
+const statsMapByChain = new Map<number, Map<string, TokenStats>>();
 const priceCache = new Map<string, { price: number | null; ts: number }>();
 
 const DARK_SVG_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxNCIgY3k9IjE0IiByPSIxNCIgZmlsbD0iIzJBMkEzQSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjODg4IiBmb250LXNpemU9IjEyIj4/PC90ZXh0Pjwvc3ZnPg==';
 
-export async function loadTokensAndMarkets(): Promise<void> {
+const chainIdToCoingeckoNetwork: Record<number, string> = {
+  1: 'ethereum',
+  137: 'polygon-pos',
+};
+
+function getChainConfigForId(chainId: number) {
+  if (chainId === 1) return ethereumConfig;
+  return config;
+}
+
+function getCurrentDataSource(): DataSource {
+  const now = Date.now();
+  if (now - lastSourceRotation >= DATA_SOURCE_ROTATION_INTERVAL) {
+    currentDataSource = currentDataSource === 'coingecko' ? 'cmc' : 'coingecko';
+    lastSourceRotation = now;
+    console.log(`Data source rotated to: ${currentDataSource}`);
+  }
+  return currentDataSource;
+}
+
+async function fetchCMCMarketData(): Promise<Map<string, TokenStats>> {
+  const statsMap = new Map<string, TokenStats>();
+  const cmcApiKey = import.meta.env.VITE_CMC_API_KEY;
+  
+  if (!cmcApiKey) {
+    console.warn('CMC API key not configured, skipping CMC data fetch');
+    return statsMap;
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      `/api/cmc/listings?limit=250`,
+      { headers: { 'Content-Type': 'application/json' } },
+      10000
+    );
+    
+    if (!response.ok) {
+      throw new Error(`CMC API returned ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.data && Array.isArray(data.data)) {
+      data.data.forEach((coin: any) => {
+        const symbol = low(coin.symbol || '');
+        const name = low(coin.name || '');
+        const quote = coin.quote?.USD || {};
+        
+        const stat: TokenStats = {
+          price: typeof quote.price === 'number' ? quote.price : null,
+          change: typeof quote.percent_change_24h === 'number' ? quote.percent_change_24h : null,
+          changePeriod: '24h',
+          volume24h: typeof quote.volume_24h === 'number' ? quote.volume_24h : 0,
+          marketCap: typeof quote.market_cap === 'number' ? quote.market_cap : 0,
+          image: '',
+        };
+        
+        if (symbol) statsMap.set(symbol, stat);
+        if (name) statsMap.set(name, stat);
+      });
+    }
+  } catch (e) {
+    console.warn('CMC market data fetch failed:', e);
+  }
+  
+  return statsMap;
+}
+
+async function fetchCoinGeckoMarketData(): Promise<Map<string, TokenStats>> {
+  const statsMap = new Map<string, TokenStats>();
+  
+  try {
+    const headers: Record<string, string> = {};
+    if (config.coingeckoApiKey) {
+      headers['x-cg-pro-api-key'] = config.coingeckoApiKey;
+    }
+    
+    const marketsUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false&price_change_percentage=24h`;
+    const response = await fetchWithTimeout(marketsUrl, { headers }, 10000);
+    
+    if (!response.ok) {
+      throw new Error(`CoinGecko API returned ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    (data as any[]).forEach((coin: any) => {
+      const symbol = low(coin.symbol || '');
+      const name = low(coin.name || '');
+      
+      const stat: TokenStats = {
+        price: typeof coin.current_price === 'number' ? coin.current_price : null,
+        change: typeof coin.price_change_percentage_24h === 'number' ? coin.price_change_percentage_24h : null,
+        changePeriod: '24h',
+        volume24h: typeof coin.total_volume === 'number' ? coin.total_volume : 0,
+        marketCap: typeof coin.market_cap === 'number' ? coin.market_cap : 0,
+        image: coin.image || '',
+      };
+      
+      if (symbol) statsMap.set(symbol, stat);
+      if (name) statsMap.set(name, stat);
+    });
+  } catch (e) {
+    console.warn('CoinGecko market data fetch failed:', e);
+  }
+  
+  return statsMap;
+}
+
+async function fetchMarketData(): Promise<Map<string, TokenStats>> {
+  const source = getCurrentDataSource();
+  
+  let statsMap: Map<string, TokenStats>;
+  
+  if (source === 'cmc') {
+    statsMap = await fetchCMCMarketData();
+    if (statsMap.size === 0) {
+      console.log('CMC returned no data, falling back to CoinGecko');
+      statsMap = await fetchCoinGeckoMarketData();
+    }
+  } else {
+    statsMap = await fetchCoinGeckoMarketData();
+    if (statsMap.size === 0) {
+      console.log('CoinGecko returned no data, falling back to CMC');
+      statsMap = await fetchCMCMarketData();
+    }
+  }
+  
+  return statsMap;
+}
+
+export async function loadTokensForChain(chainId: number): Promise<void> {
+  const network = chainIdToCoingeckoNetwork[chainId] || 'polygon-pos';
+  const chainConfig = getChainConfigForId(chainId);
+  
+  let tokenList: Token[] = [];
+  const tokenMap = new Map<string, Token>();
+  
   try {
     const [cgResponse, uniResponse] = await Promise.all([
-      fetch('https://tokens.coingecko.com/polygon-pos/all.json'),
+      fetch(`https://tokens.coingecko.com/${network}/all.json`),
       fetch('https://tokens.uniswap.org/').catch(() => null),
     ]);
 
     const cgData = await cgResponse.json();
-    const uniData = uniResponse ? await uniResponse.json().catch(() => null) : null;
-
+    
     tokenList = ((cgData.tokens || []) as any[]).map((t: any) => ({
       address: low(t.address),
       symbol: t.symbol || '',
@@ -42,70 +185,58 @@ export async function loadTokensAndMarkets(): Promise<void> {
       logoURI: t.logoURI || t.logo || '',
     }));
 
-    if (uniData && uniData.tokens) {
-      const uniTokens = ((uniData.tokens || []) as any[])
-        .filter((t: any) => t.chainId === 137)
-        .map((t: any) => ({
-          address: low(t.address),
-          symbol: t.symbol || '',
-          name: t.name || '',
-          decimals: t.decimals || 18,
-          logoURI: t.logoURI || '',
-        }));
+    if (uniResponse) {
+      const uniData = await uniResponse.json().catch(() => null);
+      if (uniData && uniData.tokens) {
+        const uniTokens = ((uniData.tokens || []) as any[])
+          .filter((t: any) => t.chainId === chainId)
+          .map((t: any) => ({
+            address: low(t.address),
+            symbol: t.symbol || '',
+            name: t.name || '',
+            decimals: t.decimals || 18,
+            logoURI: t.logoURI || '',
+          }));
 
-      const existingAddrs = new Set(tokenList.map((t) => t.address));
-      uniTokens.forEach((t) => {
-        if (!existingAddrs.has(t.address)) {
-          tokenList.push(t);
-        }
-      });
+        const existingAddrs = new Set(tokenList.map((t) => t.address));
+        uniTokens.forEach((t) => {
+          if (!existingAddrs.has(t.address)) {
+            tokenList.push(t);
+          }
+        });
+      }
     }
 
     tokenList.forEach((t) => tokenMap.set(t.address, t));
+
+    const nativeAddr = chainId === 1 
+      ? '0x0000000000000000000000000000000000000000'
+      : low(config.maticAddr);
     
-    if (!tokenMap.has(low(config.maticAddr))) {
-      tokenMap.set(low(config.maticAddr), {
-        address: low(config.maticAddr),
-        symbol: 'MATIC',
-        name: 'Polygon',
+    if (!tokenMap.has(nativeAddr)) {
+      tokenMap.set(nativeAddr, {
+        address: nativeAddr,
+        symbol: chainId === 1 ? 'ETH' : 'MATIC',
+        name: chainId === 1 ? 'Ethereum' : 'Polygon',
         decimals: 18,
         logoURI: '',
       });
     }
 
     try {
-      const headers: Record<string, string> = {};
-      if (config.coingeckoApiKey) {
-        headers['x-cg-pro-api-key'] = config.coingeckoApiKey;
-      }
-      const marketsUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=volume_desc&per_page=250&page=1&sparkline=false&price_change_percentage=24h`;
-      const rm = await fetchWithTimeout(marketsUrl, { headers }, 5000);
-      const jm = await rm.json();
-      (jm as any[]).forEach((c: any) => {
-        const sym = low(c.symbol || '');
-        const name = low(c.name || '');
-        const stat: TokenStats = {
-          price: typeof c.current_price === 'number' ? c.current_price : null,
-          change: typeof c.price_change_percentage_24h === 'number' ? c.price_change_percentage_24h : null,
-          changePeriod: '24h',
-          volume24h: typeof c.total_volume === 'number' ? c.total_volume : 0,
-          image: c.image || '',
-        };
-        if (sym) cgStatsMap.set(sym, stat);
-        if (name) cgStatsMap.set(name, stat);
-      });
-    } catch (e) {
-      console.warn('CoinGecko markets failed', e);
-    }
-
-    try {
-      const r1 = await fetch(`${config.oneInchBase}/tokens`);
+      const oneInchBase = chainId === 1 
+        ? ethereumConfig.oneInchBase 
+        : config.oneInchBase;
+      
+      const r1 = await fetch(`${oneInchBase}/tokens`);
       const j1 = await r1.json();
+      
       if (j1 && j1.tokens) {
         Object.values(j1.tokens as Record<string, any>).forEach((t: any) => {
           const addr = low(t.address || '');
           if (!addr) return;
           if (tokenMap.has(addr)) return;
+          
           const obj: Token = {
             address: addr,
             symbol: t.symbol || '',
@@ -118,7 +249,7 @@ export async function loadTokensAndMarkets(): Promise<void> {
         });
       }
     } catch (e) {
-      /* ignore */
+      console.warn('1inch tokens fetch failed:', e);
     }
 
     const seen = new Set<string>();
@@ -129,34 +260,50 @@ export async function loadTokensAndMarkets(): Promise<void> {
       return true;
     });
 
-    console.log('Loaded tokens:', tokenList.length);
+    tokenListByChain.set(chainId, tokenList);
+    tokenMapByChain.set(chainId, tokenMap);
+
+    const statsMap = await fetchMarketData();
+    statsMapByChain.set(chainId, statsMap);
+
+    console.log(`Loaded ${tokenList.length} tokens for chain ${chainId}`);
   } catch (e) {
-    console.error('loadTokensAndMarkets error', e);
+    console.error(`loadTokensForChain error for chainId ${chainId}:`, e);
   }
 }
 
-export function getTokenList(): Token[] {
-  return tokenList;
+export async function loadTokensAndMarkets(): Promise<void> {
+  await loadTokensForChain(config.chainId);
 }
 
-export function getTokenMap(): Map<string, Token> {
-  return tokenMap;
+export function getTokenList(chainId?: number): Token[] {
+  const cid = chainId ?? config.chainId;
+  return tokenListByChain.get(cid) || [];
 }
 
-export function getCgStatsMap(): Map<string, TokenStats> {
-  return cgStatsMap;
+export function getTokenMap(chainId?: number): Map<string, Token> {
+  const cid = chainId ?? config.chainId;
+  return tokenMapByChain.get(cid) || new Map();
+}
+
+export function getCgStatsMap(chainId?: number): Map<string, TokenStats> {
+  const cid = chainId ?? config.chainId;
+  return statsMapByChain.get(cid) || new Map();
 }
 
 export function getPlaceholderImage(): string {
   return DARK_SVG_PLACEHOLDER;
 }
 
-async function fetch0xPrice(addr: string): Promise<number | null> {
+async function fetch0xPrice(addr: string, chainId?: number): Promise<number | null> {
+  const cid = chainId ?? config.chainId;
+  const chainConfig = getChainConfigForId(cid);
+  
   try {
     const sellToken = addr;
-    const buyToken = config.usdcAddr;
+    const buyToken = chainConfig.usdcAddr;
     const resp = await fetchWithTimeout(
-      `${config.zeroXBase}/swap/v1/price?sellToken=${encodeURIComponent(sellToken)}&buyToken=${encodeURIComponent(buyToken)}&sellAmount=1`,
+      `${chainConfig.zeroXBase}/swap/v1/price?sellToken=${encodeURIComponent(sellToken)}&buyToken=${encodeURIComponent(buyToken)}&sellAmount=1`,
       { headers: { '0x-api-key': config.zeroXApiKey } },
       3500
     );
@@ -173,10 +320,13 @@ async function fetch0xPrice(addr: string): Promise<number | null> {
   }
 }
 
-async function fetch1InchQuotePrice(addr: string, decimals = 18): Promise<number | null> {
+async function fetch1InchQuotePrice(addr: string, decimals = 18, chainId?: number): Promise<number | null> {
+  const cid = chainId ?? config.chainId;
+  const chainConfig = getChainConfigForId(cid);
+  
   try {
     const amountBN = ethers.BigNumber.from(10).pow(decimals);
-    const qUrl = `${config.oneInchBase}/quote?fromTokenAddress=${addr}&toTokenAddress=${config.usdcAddr}&amount=${amountBN.toString()}`;
+    const qUrl = `${chainConfig.oneInchBase}/quote?fromTokenAddress=${addr}&toTokenAddress=${chainConfig.usdcAddr}&amount=${amountBN.toString()}`;
     const res = await fetchWithTimeout(qUrl, {}, 3000);
     if (!res.ok) throw new Error('1inch non-ok');
     const j = await res.json();
@@ -190,13 +340,16 @@ async function fetch1InchQuotePrice(addr: string, decimals = 18): Promise<number
   }
 }
 
-async function fetchCoingeckoSimple(addr: string): Promise<number | null> {
+async function fetchCoingeckoSimple(addr: string, chainId?: number): Promise<number | null> {
+  const cid = chainId ?? config.chainId;
+  const network = chainIdToCoingeckoNetwork[cid] || 'polygon-pos';
+  
   try {
     const headers: Record<string, string> = {};
     if (config.coingeckoApiKey) {
       headers['x-cg-pro-api-key'] = config.coingeckoApiKey;
     }
-    const url = `https://api.coingecko.com/api/v3/simple/token_price/${config.coingeckoChain}?contract_addresses=${addr}&vs_currencies=usd`;
+    const url = `https://api.coingecko.com/api/v3/simple/token_price/${network}?contract_addresses=${addr}&vs_currencies=usd`;
     const res = await fetchWithTimeout(url, { headers }, 3000);
     if (!res.ok) throw new Error('cg simple non-ok');
     const j = await res.json();
@@ -231,9 +384,16 @@ async function fetchDexscreenerPrice(addr: string): Promise<number | null> {
   }
 }
 
-async function fetchGeckoTerminalPrice(addr: string): Promise<number | null> {
+async function fetchGeckoTerminalPrice(addr: string, chainId?: number): Promise<number | null> {
+  const cid = chainId ?? config.chainId;
+  const networkMap: Record<number, string> = {
+    1: 'eth',
+    137: 'polygon_pos',
+  };
+  const network = networkMap[cid] || 'polygon_pos';
+  
   try {
-    const url = `https://api.geckoterminal.com/api/v2/networks/polygon_pos/tokens/${addr}`;
+    const url = `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${addr}`;
     const res = await fetchWithTimeout(url, {}, 3000);
     if (!res.ok) throw new Error('geckoterminal non-ok');
     const j = await res.json();
@@ -248,25 +408,25 @@ async function fetchGeckoTerminalPrice(addr: string): Promise<number | null> {
   }
 }
 
-export async function getTokenPriceUSD(address: string, decimals = 18): Promise<number | null> {
+export async function getTokenPriceUSD(address: string, decimals = 18, chainId?: number): Promise<number | null> {
   if (!address) return null;
   const addr = low(address);
-  const cached = priceCache.get(addr);
+  const cacheKey = `${chainId ?? config.chainId}-${addr}`;
+  const cached = priceCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < config.priceCacheTtl) {
     return cached.price;
   }
 
   const sources = [
-    { name: 'coingecko_simple', fn: () => fetchCoingeckoSimple(addr), priority: 1, retries: 2 },
-    { name: '0x', fn: () => fetch0xPrice(addr), priority: 2, retries: 2 },
-    { name: '1inch', fn: () => fetch1InchQuotePrice(addr, decimals), priority: 3, retries: 2 },
+    { name: 'coingecko_simple', fn: () => fetchCoingeckoSimple(addr, chainId), priority: 1, retries: 2 },
+    { name: '0x', fn: () => fetch0xPrice(addr, chainId), priority: 2, retries: 2 },
+    { name: '1inch', fn: () => fetch1InchQuotePrice(addr, decimals, chainId), priority: 3, retries: 2 },
     { name: 'dexscreener', fn: () => fetchDexscreenerPrice(addr), priority: 4, retries: 1 },
-    { name: 'geckoterminal', fn: () => fetchGeckoTerminalPrice(addr), priority: 5, retries: 1 },
+    { name: 'geckoterminal', fn: () => fetchGeckoTerminalPrice(addr, chainId), priority: 5, retries: 1 },
   ];
 
   let best: { price: number; priority: number } | null = null;
 
-  // Try each source with retries
   for (const source of sources) {
     for (let attempt = 0; attempt <= source.retries; attempt++) {
       try {
@@ -274,30 +434,32 @@ export async function getTokenPriceUSD(address: string, decimals = 18): Promise<
         if (price && Number.isFinite(price) && price > 0) {
           if (!best || source.priority < best.priority) {
             best = { price, priority: source.priority };
-            break; // Found good price, move to next source
+            break;
           }
         }
       } catch (e) {
         if (attempt === source.retries) {
           console.warn(`${source.name} failed after ${source.retries + 1} attempts`);
         }
-        // Wait before retry
         if (attempt < source.retries) {
           await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
     }
     
-    // If we found a high-priority price, stop trying other sources
     if (best && best.priority <= 2) break;
   }
 
   const finalPrice = best?.price ?? null;
-  priceCache.set(addr, { price: finalPrice, ts: Date.now() });
+  priceCache.set(cacheKey, { price: finalPrice, ts: Date.now() });
   return finalPrice;
 }
 
-export async function searchTokens(query: string): Promise<Token[]> {
+export async function searchTokens(query: string, chainId?: number): Promise<Token[]> {
+  const cid = chainId ?? config.chainId;
+  const tokenList = getTokenList(cid);
+  const statsMap = getCgStatsMap(cid);
+  
   const q = query.toLowerCase();
   const matches = tokenList.filter((t) => {
     const s = t.symbol || '';
@@ -306,10 +468,10 @@ export async function searchTokens(query: string): Promise<Token[]> {
   });
 
   const withStats = matches.map((t) => {
-    const stats = cgStatsMap.get(low(t.symbol)) || cgStatsMap.get(low(t.name));
+    const stats = statsMap.get(low(t.symbol)) || statsMap.get(low(t.name));
     const startBonus = (t.symbol.toLowerCase().startsWith(q) || t.name.toLowerCase().startsWith(q)) ? 1e15 : 0;
     
-    const marketCap = stats?.price && stats?.volume24h ? (stats.price * stats.volume24h * 1000) : 0;
+    const marketCap = stats?.marketCap || (stats?.price && stats?.volume24h ? (stats.price * stats.volume24h * 0.01) : 0);
     const v24 = stats?.volume24h || 0;
     
     const score = startBonus + (marketCap * 10) + v24;
@@ -319,17 +481,20 @@ export async function searchTokens(query: string): Promise<Token[]> {
 
   withStats.sort((a, b) => b.score - a.score);
 
-  const top5ByMarketCap = withStats
+  const top7ByMarketCap = withStats
     .filter((x) => x.marketCap > 0)
     .sort((a, b) => b.marketCap - a.marketCap)
-    .slice(0, 5);
+    .slice(0, 7);
 
-  const remaining = withStats
-    .filter((x) => !top5ByMarketCap.includes(x))
+  const usedAddresses = new Set(top7ByMarketCap.map((x) => x.t.address));
+  
+  const top7ByVolume = withStats
+    .filter((x) => !usedAddresses.has(x.t.address) && x.v24 > 0)
     .sort((a, b) => b.v24 - a.v24)
-    .slice(0, 10);
+    .slice(0, 7);
 
-  const combined = [...top5ByMarketCap, ...remaining];
+  const combined = [...top7ByMarketCap, ...top7ByVolume];
+  
   const seen = new Set<string>();
   const unique = combined.filter((x) => {
     if (seen.has(x.t.address)) return false;
@@ -337,24 +502,58 @@ export async function searchTokens(query: string): Promise<Token[]> {
     return true;
   });
 
-  return unique.slice(0, 15).map((x) => x.t);
+  return unique.slice(0, 14).map((x) => x.t);
 }
 
-export function getTopTokens(limit = 15): { token: Token; stats: TokenStats | null }[] {
+export function getTopTokens(limit = 14, chainId?: number): { token: Token; stats: TokenStats | null }[] {
+  const cid = chainId ?? config.chainId;
+  const tokenList = getTokenList(cid);
+  const statsMap = getCgStatsMap(cid);
+  
   const candidates = tokenList.filter((t) => {
     const s = low(t.symbol);
     const n = low(t.name);
-    return cgStatsMap.has(s) || cgStatsMap.has(n);
+    return statsMap.has(s) || statsMap.has(n);
   });
 
   const withStats = candidates.map((t) => {
     const s = low(t.symbol);
     const n = low(t.name);
-    const stat = cgStatsMap.get(s) || cgStatsMap.get(n) || null;
+    const stat = statsMap.get(s) || statsMap.get(n) || null;
     return { token: t, stats: stat };
   });
 
-  withStats.sort((a, b) => (b.stats?.volume24h || 0) - (a.stats?.volume24h || 0));
+  const halfLimit = Math.floor(limit / 2);
+  
+  const byMarketCap = [...withStats]
+    .filter((x) => x.stats?.marketCap && x.stats.marketCap > 0)
+    .sort((a, b) => (b.stats?.marketCap || 0) - (a.stats?.marketCap || 0))
+    .slice(0, halfLimit);
 
-  return withStats.slice(0, limit);
+  const usedAddresses = new Set(byMarketCap.map((x) => x.token.address));
+  
+  const byVolume = [...withStats]
+    .filter((x) => !usedAddresses.has(x.token.address) && x.stats?.volume24h && x.stats.volume24h > 0)
+    .sort((a, b) => (b.stats?.volume24h || 0) - (a.stats?.volume24h || 0))
+    .slice(0, halfLimit);
+
+  const combined = [...byMarketCap, ...byVolume];
+  
+  const seen = new Set<string>();
+  return combined.filter((x) => {
+    if (seen.has(x.token.address)) return false;
+    seen.add(x.token.address);
+    return true;
+  }).slice(0, limit);
+}
+
+export function getTopTokensByChain(chainId: number, limit = 14): { token: Token; stats: TokenStats | null }[] {
+  return getTopTokens(limit, chainId);
+}
+
+export async function refreshMarketData(chainId?: number): Promise<void> {
+  const cid = chainId ?? config.chainId;
+  const statsMap = await fetchMarketData();
+  statsMapByChain.set(cid, statsMap);
+  console.log(`Refreshed market data for chain ${cid}, source: ${currentDataSource}`);
 }

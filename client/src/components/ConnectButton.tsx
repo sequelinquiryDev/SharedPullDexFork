@@ -1,15 +1,13 @@
 
-import { useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } from 'wagmi';
+import { useAccount, useConnect, useDisconnect } from 'wagmi';
 import { useState, useEffect, useRef } from 'react';
-import { shortAddr, config } from '@/lib/config';
+import { shortAddr } from '@/lib/config';
 import { showToast } from './Toast';
 
 export function ConnectButton() {
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { disconnect } = useDisconnect();
-  const chainId = useChainId();
-  const { switchChain } = useSwitchChain();
   const [showModal, setShowModal] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -55,17 +53,6 @@ export function ConnectButton() {
     }
   };
 
-  const handleSwitchChain = async () => {
-    try {
-      await switchChain({ chainId: config.chainId });
-      showToast('Switched to Polygon', { type: 'success' });
-    } catch (e: any) {
-      showToast('Failed to switch network', { type: 'error' });
-    }
-  };
-
-  const isWrongChain = isConnected && chainId !== config.chainId;
-
   return (
     <>
       <div className="top-right-connect">
@@ -73,20 +60,6 @@ export function ConnectButton() {
           <div className="addr-chip" data-testid="text-address-chip">
             {shortAddr(address)}
           </div>
-        )}
-        
-        {isWrongChain && (
-          <button
-            onClick={handleSwitchChain}
-            className="glassy-btn"
-            style={{ 
-              background: 'rgba(255, 100, 100, 0.2)',
-              border: '1px solid rgba(255, 100, 100, 0.3)'
-            }}
-            data-testid="button-switch-chain"
-          >
-            Wrong Chain
-          </button>
         )}
 
         <button
