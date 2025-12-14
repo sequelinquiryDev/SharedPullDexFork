@@ -369,8 +369,16 @@ body::before {
 }
 
 .glassy-btn.connected {
-  background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+  background: linear-gradient(135deg, rgba(180, 68, 255, 0.2), rgba(112, 19, 255, 0.15));
+  border: 1px solid rgba(180, 68, 255, 0.4);
   color: #fff;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+body.eth-chain .glassy-btn.connected {
+  background: linear-gradient(135deg, rgba(69, 137, 255, 0.2), rgba(19, 112, 255, 0.15));
+  border: 1px solid rgba(69, 137, 255, 0.4);
 }
 
 /* ===== SWAP OUTSIDE BUTTON ===== */
@@ -939,9 +947,9 @@ body::before {
 /* ===== TOKEN SEARCH BAR =================== */
 .token-search-bar-container {
   position: fixed;
-  top: 50%;
+  top: calc(8vh + 100px);
   left: 50%;
-  transform: translate(-50%, -130px);
+  transform: translateX(-50%);
   width: 90%;
   max-width: 500px;
   z-index: 60;
@@ -1003,117 +1011,7 @@ body::before {
   -webkit-overflow-scrolling: touch;
 }
 
-/* ===== PRICE TICKER =================== */
-.price-ticker-container {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -180px);
-  width: 90%;
-  max-width: 600px;
-  overflow: hidden;
-  z-index: 50;
-  pointer-events: none;
-  mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    black 8%,
-    black 92%,
-    transparent 100%
-  );
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    black 8%,
-    black 92%,
-    transparent 100%
-  );
-}
 
-.price-ticker-track {
-  display: flex;
-  animation: ticker-scroll 45s linear infinite;
-  will-change: transform;
-}
-
-@keyframes ticker-scroll {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-33.333%);
-  }
-}
-
-.ticker-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  margin: 0 8px;
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.08),
-    rgba(255, 255, 255, 0.03)
-  );
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  white-space: nowrap;
-  font-size: 13px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  flex-shrink: 0;
-}
-
-.ticker-logo {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.ticker-symbol {
-  font-weight: 700;
-  color: #b445ff;
-  font-size: 13px;
-}
-
-.ticker-price {
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 12px;
-}
-
-.ticker-change {
-  font-weight: 600;
-  font-size: 12px;
-}
-
-@media (max-width: 720px) {
-  .price-ticker-container {
-    transform: translate(-50%, -180px);
-    width: 95%;
-  }
-
-  .ticker-item {
-    padding: 8px 14px;
-    margin: 0 6px;
-    font-size: 11px;
-  }
-
-  .ticker-logo {
-    width: 16px;
-    height: 16px;
-  }
-
-  .ticker-symbol {
-    font-size: 11px;
-  }
-
-  .ticker-price,
-  .ticker-change {
-    font-size: 10px;
-  }
-}
 
 /* ===== MOBILE RESPONSIVE ===== */
 @media (max-width: 720px) {

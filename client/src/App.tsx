@@ -5,7 +5,7 @@ import { queryClient } from '@/lib/queryClient';
 import { wagmiConfig } from '@/lib/wagmiConfig';
 import { ParticleBackground } from '@/components/ParticleBackground';
 import { Logo } from '@/components/Logo';
-import { PriceTicker } from '@/components/PriceTicker';
+import { TokenSearchBar } from '@/components/TokenSearchBar';
 import { ConnectButton } from '@/components/ConnectButton';
 import { SwitchChainButton } from '@/components/SwitchChainButton';
 import { ChatPanel } from '@/components/ChatPanel';
@@ -31,7 +31,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <ParticleBackground />
         <Logo />
-        <PriceTicker />
+        <TokenSearchBar />
         <ConnectButton />
         <SwitchChainButton />
         <CookiesPopup />

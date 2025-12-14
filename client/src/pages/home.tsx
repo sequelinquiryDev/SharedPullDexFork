@@ -7,7 +7,6 @@ import { showToast } from '@/components/Toast';
 import { Token, loadTokensAndMarkets, getTokenPriceUSD, getTokenMap } from '@/lib/tokenService';
 import { getBestQuote, executeSwap, approveToken, checkAllowance, parseSwapError, QuoteResult } from '@/lib/swapService';
 import { config, low } from '@/lib/config';
-import { TokenSearchBar } from '@/components/TokenSearchBar';
 
 export default function Home() {
   const { address, isConnected } = useAccount();
@@ -266,15 +265,8 @@ export default function Home() {
     parseFloat(fromAmount) > 0 &&
     !isSwapping;
 
-  const handleSearchTokenSelect = (token: Token) => {
-    setFromToken(token);
-    setFromAmount('');
-  };
-
   return (
     <div className="section-wrapper">
-      <TokenSearchBar onTokenSelect={handleSearchTokenSelect} />
-
       <div
         className="glass-card card-entrance"
         style={{
