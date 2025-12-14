@@ -1,14 +1,21 @@
 import { ethers } from 'ethers';
 import { config, ethereumConfig, fetchWithTimeout, low } from './config';
 
-export type ChainType = 'ETH' | 'POL';
+export type ChainType = 'ETH' | 'POL' | 'BRG';
 
 export interface QuoteResult {
-  source: '0x' | '1inch';
+  source: '0x' | '1inch' | 'lifi';
   toAmount: string;
   normalized: number;
   data?: any;
+  isBridge?: boolean;
 }
+
+// Chain IDs for LIFI
+const CHAIN_IDS = {
+  ETH: 1,
+  POL: 137,
+} as const;
 
 const quoteCache = new Map<string, { best: QuoteResult; ts: number }>();
 
@@ -88,6 +95,57 @@ async function fetch1InchQuote(
   } catch (e) {
     return null;
   }
+}
+
+// LIFI quote for same-chain swaps
+async function fetchLifiQuote(
+  fromAddr: string,
+  toAddr: string,
+  sellAmount: string,
+  toDecimals: number,
+  fromChainId: number,
+  toChainId: number
+): Promise<QuoteResult | null> {
+  try {
+    const isBridge = fromChainId !== toChainId;
+    const url = `/api/proxy/lifi/quote?fromChain=${fromChainId}&toChain=${toChainId}&fromToken=${encodeURIComponent(fromAddr)}&toToken=${encodeURIComponent(toAddr)}&fromAmount=${sellAmount}`;
+    console.log(`[LIFI Quote] Fetching ${isBridge ? 'bridge' : 'swap'} quote: chain ${fromChainId} -> ${toChainId}`);
+    
+    const resp = await fetchWithTimeout(url, {}, 8000);
+    if (!resp.ok) {
+      console.warn(`[LIFI Quote] Failed with status ${resp.status}`);
+      return null;
+    }
+    const j = await resp.json();
+    if (!j || !j.estimate || !j.estimate.toAmount) {
+      console.warn('[LIFI Quote] Invalid response - no toAmount');
+      return null;
+    }
+    const normalized = Number(ethers.utils.formatUnits(j.estimate.toAmount, toDecimals));
+    console.log(`[LIFI Quote] Success: toAmount=${j.estimate.toAmount}, normalized=${normalized.toFixed(8)}`);
+    return {
+      source: 'lifi',
+      toAmount: j.estimate.toAmount,
+      normalized,
+      data: j,
+      isBridge,
+    };
+  } catch (e) {
+    console.error('[LIFI Quote] Error:', e);
+    return null;
+  }
+}
+
+// Get LIFI bridge quote for cross-chain transfers
+export async function getLifiBridgeQuote(
+  fromAddr: string,
+  toAddr: string,
+  amountWei: string,
+  toDecimals: number,
+  fromChainId: number,
+  toChainId: number
+): Promise<QuoteResult | null> {
+  return fetchLifiQuote(fromAddr, toAddr, amountWei, toDecimals, fromChainId, toChainId);
 }
 
 export async function getBestQuote(

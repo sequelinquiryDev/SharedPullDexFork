@@ -92,6 +92,10 @@ function getZeroXApiKey(): string {
   return process.env.VITE_ZEROX_API_KEY || '';
 }
 
+function getLifiApiKey(): string {
+  return process.env.VITE_LIFI_API_KEY || '';
+}
+
 // Alternating source for token prices
 let lastPriceSource: 'cmc' | 'coingecko' = 'cmc';
 
@@ -127,6 +131,7 @@ export async function registerRoutes(
       hasCoingeckoKey: !!getCoingeckoApiKey(),
       hasCmcKey: !!getCmcApiKey(),
       hasZeroXKey: !!getZeroXApiKey(),
+      hasLifiKey: !!getLifiApiKey(),
     });
   });
 
@@ -428,6 +433,84 @@ export async function registerRoutes(
     } catch (error) {
       console.error('0x ETH proxy error:', error);
       return res.status(500).json({ error: 'Failed to fetch 0x ETH data' });
+    }
+  });
+
+  // Proxy for LIFI API - Cross-chain bridging and swaps (GET requests)
+  app.get("/api/proxy/lifi/*", rateLimitMiddleware, async (req, res) => {
+    try {
+      const lifiApiKey = getLifiApiKey();
+      
+      const path = req.params[0] || '';
+      const queryString = new URLSearchParams(req.query as Record<string, string>).toString();
+      const url = `https://li.quest/v1/${path}${queryString ? '?' + queryString : ''}`;
+      
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+      };
+      
+      if (lifiApiKey) {
+        headers['x-lifi-api-key'] = lifiApiKey;
+      }
+      
+      const response = await fetch(url, { headers });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('LIFI API error:', response.status, errorText);
+        return res.status(response.status).json({ 
+          error: 'LIFI API request failed',
+          status: response.status,
+          details: errorText
+        });
+      }
+
+      const data = await response.json();
+      return res.json(data);
+    } catch (error) {
+      console.error('LIFI proxy error:', error);
+      return res.status(500).json({ error: 'Failed to fetch LIFI data' });
+    }
+  });
+
+  // Proxy for LIFI API - POST requests (for advanced routes)
+  app.post("/api/proxy/lifi/*", rateLimitMiddleware, async (req, res) => {
+    try {
+      const lifiApiKey = getLifiApiKey();
+      
+      const path = req.params[0] || '';
+      const url = `https://li.quest/v1/${path}`;
+      
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      };
+      
+      if (lifiApiKey) {
+        headers['x-lifi-api-key'] = lifiApiKey;
+      }
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(req.body),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('LIFI API POST error:', response.status, errorText);
+        return res.status(response.status).json({ 
+          error: 'LIFI API request failed',
+          status: response.status,
+          details: errorText
+        });
+      }
+
+      const data = await response.json();
+      return res.json(data);
+    } catch (error) {
+      console.error('LIFI proxy POST error:', error);
+      return res.status(500).json({ error: 'Failed to fetch LIFI data' });
     }
   });
 
