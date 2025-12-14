@@ -2,7 +2,7 @@
 export function Logo() {
   return (
     <img
-      src="/android-chrome-512x512.png"
+      src="/logo-nola.png"
       alt="NOLA Logo"
       className="logo-float"
       style={{

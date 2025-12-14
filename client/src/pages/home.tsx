@@ -1,28 +1,38 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAccount, useChainId } from 'wagmi';
+import { useAccount, useChainId, useBalance } from 'wagmi';
 import { ethers } from 'ethers';
+import { useLocation } from 'wouter';
 import { TokenInput } from '@/components/TokenInput';
 import { SlippageControl } from '@/components/SlippageControl';
 import { showToast } from '@/components/Toast';
-import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap } from '@/lib/tokenService';
+import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress } from '@/lib/tokenService';
 import { getBestQuote, executeSwap, approveToken, checkAllowance, parseSwapError, QuoteResult } from '@/lib/swapService';
-import { config, ethereumConfig, low } from '@/lib/config';
+import { config, ethereumConfig, low, isAddress } from '@/lib/config';
 import { useChain, ChainType, chainConfigs } from '@/lib/chainContext';
 
+// ETH chain: ETH (native) -> USDT
+const ETHEREUM_DEFAULTS = {
+  fromToken: '0x0000000000000000000000000000000000000000', // ETH (native)
+  toToken: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
+};
+
+// POL chain: USDC -> WETH
 const POLYGON_DEFAULTS = {
   fromToken: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174', // USDC
   toToken: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619', // WETH
 };
 
-const ETHEREUM_DEFAULTS = {
-  fromToken: '0x0000000000000000000000000000000000000000', // ETH (native)
-  toToken: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+// Fee configuration
+const FEE_CONFIG = {
+  ETH: { feeUsd: 1.2, feeToken: 'ETH' },
+  POL: { feePercent: 0.00001, feeToken: 'MATIC' },
 };
 
 export default function Home() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const { chain, chainConfig, onChainChange } = useChain();
+  const { chain, chainConfig, setChain, onChainChange } = useChain();
+  const [location] = useLocation();
 
   const [fromToken, setFromToken] = useState<Token | null>(null);
   const [toToken, setToToken] = useState<Token | null>(null);
@@ -35,8 +45,93 @@ export default function Home() {
 
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [isSwapping, setIsSwapping] = useState(false);
+  const [swapStep, setSwapStep] = useState<string>('');
   const [tokensLoaded, setTokensLoaded] = useState(false);
+  const [userBalance, setUserBalance] = useState<string | null>(null);
+  const [insufficientFunds, setInsufficientFunds] = useState(false);
   const previousChainRef = useRef<ChainType>(chain);
+
+  // Get user balance for from token
+  const { data: nativeBalance } = useBalance({
+    address: address,
+    chainId: chain === 'ETH' ? 1 : 137,
+  });
+
+  const { data: tokenBalance } = useBalance({
+    address: address,
+    token: fromToken && fromToken.address !== '0x0000000000000000000000000000000000000000' 
+      ? fromToken.address as `0x${string}` 
+      : undefined,
+    chainId: chain === 'ETH' ? 1 : 137,
+  });
+
+  // Check balance and set insufficient funds state
+  useEffect(() => {
+    if (!fromToken || !fromAmount || !address) {
+      setInsufficientFunds(false);
+      setUserBalance(null);
+      return;
+    }
+
+    const isNative = fromToken.address === '0x0000000000000000000000000000000000000000' ||
+      fromToken.address === config.maticAddr;
+
+    const balance = isNative ? nativeBalance : tokenBalance;
+    
+    if (balance) {
+      const balanceFormatted = parseFloat(ethers.utils.formatUnits(balance.value, fromToken.decimals));
+      setUserBalance(balanceFormatted.toFixed(6));
+      
+      const amount = parseFloat(fromAmount);
+      if (!isNaN(amount) && amount > balanceFormatted) {
+        setInsufficientFunds(true);
+      } else {
+        setInsufficientFunds(false);
+      }
+    }
+  }, [fromToken, fromAmount, address, nativeBalance, tokenBalance]);
+
+  // URL-based token input: Check for token address in URL
+  useEffect(() => {
+    const checkUrlToken = async () => {
+      const url = new URL(window.location.href);
+      const pathParts = url.pathname.split('/');
+      
+      // Check for /0x... pattern
+      const tokenAddress = pathParts.find(part => isAddress(part));
+      
+      if (tokenAddress) {
+        // Detect chain from token - try ETH first, then POL
+        let detectedChain: ChainType = 'POL';
+        let token: Token | null = null;
+        
+        // Try Ethereum first
+        token = await getTokenByAddress(tokenAddress, 1);
+        if (token) {
+          detectedChain = 'ETH';
+        } else {
+          // Try Polygon
+          token = await getTokenByAddress(tokenAddress, 137);
+          if (token) {
+            detectedChain = 'POL';
+          }
+        }
+        
+        if (token && detectedChain !== chain) {
+          setChain(detectedChain);
+        }
+        
+        if (token) {
+          setFromToken(token);
+          showToast(`Loaded ${token.symbol} from URL`, { type: 'success', ttl: 3000 });
+        }
+      }
+    };
+    
+    if (tokensLoaded) {
+      checkUrlToken();
+    }
+  }, [tokensLoaded, location]);
 
   const fetchPrices = useCallback(async () => {
     const currentChainId = chain === 'ETH' ? 1 : 137;
@@ -79,13 +174,25 @@ export default function Home() {
     let newFromToken = tokenMap.get(fromTokenAddr);
     let newToToken = tokenMap.get(toTokenAddr);
     
+    // Native ETH for Ethereum chain
     if (chainType === 'ETH' && !newFromToken) {
       newFromToken = {
         address: '0x0000000000000000000000000000000000000000',
         symbol: 'ETH',
         name: 'Ethereum',
         decimals: 18,
-        logoURI: '',
+        logoURI: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+      };
+    }
+    
+    // USDT fallback for ETH
+    if (chainType === 'ETH' && !newToToken) {
+      newToToken = {
+        address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+        symbol: 'USDT',
+        name: 'Tether USD',
+        decimals: 6,
+        logoURI: 'https://assets.coingecko.com/coins/images/325/small/Tether.png',
       };
     }
     
@@ -110,6 +217,7 @@ export default function Home() {
         setQuote(null);
         setFromPriceUsd(null);
         setToPriceUsd(null);
+        setInsufficientFunds(false);
         
         setDefaultTokensForChain(newChain);
       }
@@ -118,18 +226,15 @@ export default function Home() {
     return unsubscribe;
   }, [onChainChange, setDefaultTokensForChain]);
 
-  // Fetch prices for selected tokens using the useCallback function
   useEffect(() => {
     fetchPrices();
   }, [fetchPrices]);
 
-  // Simple price-based estimate (updates immediately - NO external fetching)
-  // This is pure math: (fromAmount * fromPrice) / toPrice = estimatedToAmount
+  // Price-based estimate
   useEffect(() => {
     if (fromToken && toToken && fromAmount && fromPriceUsd !== null && toPriceUsd !== null) {
       const amount = parseFloat(fromAmount);
       if (!isNaN(amount) && amount > 0 && fromPriceUsd > 0 && toPriceUsd > 0) {
-        // Simple calculation: convert to USD, then to target token
         const fromUSD = amount * fromPriceUsd;
         const estimatedTo = fromUSD / toPriceUsd;
         setToAmount(estimatedTo.toFixed(6));
@@ -141,7 +246,7 @@ export default function Home() {
     }
   }, [fromAmount, fromPriceUsd, toPriceUsd, fromToken, toToken]);
 
-  // Fetch real quote in background for accurate swap
+  // Fetch real quote
   useEffect(() => {
     const fetchQuote = async () => {
       if (!fromToken || !toToken || !fromAmount || parseFloat(fromAmount) <= 0) {
@@ -157,7 +262,8 @@ export default function Home() {
           amountBN.toString(),
           fromToken.decimals,
           toToken.decimals,
-          slippage
+          slippage,
+          chain
         );
 
         if (result) {
@@ -173,13 +279,13 @@ export default function Home() {
 
     const debounce = setTimeout(fetchQuote, 500);
     return () => clearTimeout(debounce);
-  }, [fromToken, toToken, fromAmount, slippage]);
+  }, [fromToken, toToken, fromAmount, slippage, chain]);
 
-  // Refresh prices periodically (every 8 seconds for real-time trading)
+  // Refresh prices periodically
   useEffect(() => {
     const interval = setInterval(() => {
       fetchPrices();
-    }, 8000); // Update every 8 seconds
+    }, 8000);
 
     return () => clearInterval(interval);
   }, [fetchPrices]);
@@ -213,8 +319,13 @@ export default function Home() {
       return;
     }
 
+    if (insufficientFunds) {
+      showToast(`Insufficient ${fromToken.symbol} balance. You have ${userBalance} ${fromToken.symbol}`, { type: 'error', ttl: 5000 });
+      return;
+    }
+
     if (!quote) {
-      showToast('Fetching quote... please wait', { type: 'info', ttl: 3000 });
+      showToast('Fetching best price... please wait', { type: 'info', ttl: 3000 });
       return;
     }
 
@@ -238,6 +349,7 @@ export default function Home() {
     }
 
     setIsSwapping(true);
+    setSwapStep('Preparing transaction...');
 
     const currentChainId = chain === 'ETH' ? 1 : 137;
     const currentConfig = chain === 'ETH' ? ethereumConfig : config;
@@ -246,18 +358,21 @@ export default function Home() {
     try {
       const amountWei = ethers.utils.parseUnits(fromAmount, fromToken.decimals);
 
-      showToast('Fetching best quote from 0x and 1inch...', { type: 'info', ttl: 2000 });
+      setSwapStep('Finding best price via 0x...');
+      showToast('Finding best swap route...', { type: 'info', ttl: 2000 });
+      
       const bestQuote = await getBestQuote(
         fromToken.address,
         toToken.address,
         amountWei.toString(),
         fromToken.decimals,
         toToken.decimals,
-        slippage
+        slippage,
+        chain
       );
 
       if (!bestQuote) {
-        showToast('No liquidity available for this trading pair. Try a different token or amount.', { type: 'error', ttl: 5000 });
+        showToast('No liquidity available for this pair. Try a different token or smaller amount.', { type: 'error', ttl: 5000 });
         return;
       }
 
@@ -266,18 +381,23 @@ export default function Home() {
       const provider = new ethers.providers.Web3Provider(window.ethereum as any);
       const signer = provider.getSigner();
 
-      if (fromToken.address !== nativeAddr) {
-        const spender = bestQuote.data?.to || currentConfig.zeroXBase;
+      // Check if token needs approval (not native token)
+      if (fromToken.address !== nativeAddr && fromToken.address !== '0x0000000000000000000000000000000000000000') {
+        setSwapStep('Checking token approval...');
+        const spender = bestQuote.data?.to || (chain === 'ETH' ? ethereumConfig.zeroXBase : config.zeroXBase);
         const allowance = await checkAllowance(provider, fromToken.address, address, spender);
 
         if (allowance.lt(amountWei)) {
-          showToast('Approval required. Please approve the token in your wallet...', { type: 'info', ttl: 3000 });
+          setSwapStep('Requesting token approval...');
+          showToast('Approve token spending in your wallet...', { type: 'info', ttl: 5000 });
           await approveToken(signer, fromToken.address, spender, ethers.constants.MaxUint256);
           showToast('Token approved successfully!', { type: 'success', ttl: 3000 });
         }
       }
 
-      showToast(`Executing swap via ${bestQuote.source}... Please confirm in your wallet.`, { type: 'info', ttl: 3000 });
+      setSwapStep(`Executing swap via ${bestQuote.source}...`);
+      showToast(`Confirm the swap in your wallet...`, { type: 'info', ttl: 5000 });
+      
       const tx = await executeSwap(
         signer,
         bestQuote,
@@ -285,23 +405,30 @@ export default function Home() {
         toToken.address,
         amountWei.toString(),
         fromToken.decimals,
-        slippage
+        slippage,
+        chain
       );
 
       if (tx) {
-        showToast('Swap submitted! Waiting for blockchain confirmation...', { type: 'info', ttl: 3000 });
+        setSwapStep('Waiting for confirmation...');
+        showToast('Transaction submitted! Waiting for confirmation...', { type: 'info', ttl: 5000 });
+        
         const receipt = await tx.wait();
-        showToast(`Swap successful! ${fromAmount} ${fromToken.symbol} → ${toToken.symbol}`, { type: 'success', ttl: 6000 });
+        
+        const explorerUrl = chain === 'ETH' ? ethereumConfig.explorerUrl : config.explorerUrl;
+        showToast(`Swap successful! ${fromAmount} ${fromToken.symbol} → ${toToken.symbol}`, { type: 'success', ttl: 8000 });
+        
         setFromAmount('');
         setToAmount('');
         await fetchPrices();
       }
     } catch (error: any) {
-      const errorMsg = parseSwapError(error);
+      const errorMsg = parseSwapError(error, chain);
       showToast(errorMsg, { type: 'error', ttl: 6000 });
       console.error('Swap error:', error);
     } finally {
       setIsSwapping(false);
+      setSwapStep('');
     }
   };
 
@@ -310,7 +437,18 @@ export default function Home() {
     fromToken &&
     toToken &&
     parseFloat(fromAmount) > 0 &&
-    !isSwapping;
+    !isSwapping &&
+    !insufficientFunds;
+
+  const getButtonText = () => {
+    if (!isConnected) return 'Connect Wallet';
+    if (!fromToken || !toToken) return 'Select Tokens';
+    if (!fromAmount || parseFloat(fromAmount) <= 0) return 'Enter Amount';
+    if (insufficientFunds) return `Insufficient ${fromToken?.symbol || ''} Balance`;
+    if (isSwapping) return swapStep || 'Swapping...';
+    if (!quote) return 'Fetching Price...';
+    return 'Swap';
+  };
 
   return (
     <div className="section-wrapper">
@@ -334,6 +472,18 @@ export default function Home() {
           onAmountChange={setFromAmount}
           priceUsd={fromPriceUsd}
         />
+
+        {insufficientFunds && userBalance && (
+          <div style={{ 
+            color: '#ff9e9e', 
+            fontSize: '12px', 
+            marginTop: '4px',
+            textAlign: 'right',
+            padding: '0 8px'
+          }}>
+            Balance: {userBalance} {fromToken?.symbol}
+          </div>
+        )}
 
         <TokenInput
           side="to"
@@ -379,26 +529,29 @@ export default function Home() {
               justifyContent: 'center',
               background: canSwap
                 ? 'linear-gradient(90deg, var(--accent-1), var(--accent-2))'
+                : insufficientFunds
+                ? 'linear-gradient(90deg, #ff4444, #cc3333)'
                 : undefined,
             }}
             onClick={handleSwapClick}
+            disabled={isSwapping}
             data-testid="button-swap-main"
           >
             {isSwapping ? (
               <>
                 <span className="btn-spinner" />
-                <span>Swapping...</span>
+                <span>{swapStep || 'Swapping...'}</span>
               </>
             ) : (
               <>
                 <span className="icon">⇄</span>
-                <span className="label">Swap</span>
+                <span className="label">{getButtonText()}</span>
               </>
             )}
           </button>
         </div>
 
-        {quote && (
+        {quote && !isSwapping && (
           <div
             style={{
               textAlign: 'center',
@@ -408,7 +561,20 @@ export default function Home() {
             }}
             data-testid="text-quote-source"
           >
-            Best price via {quote.source === '0x' ? '0x Protocol' : '1inch'}
+            Best price via {quote.source === '0x' ? '0x Protocol' : '1inch'} on {chain}
+          </div>
+        )}
+
+        {chain === 'ETH' && (
+          <div
+            style={{
+              textAlign: 'center',
+              marginTop: '8px',
+              fontSize: '11px',
+              opacity: 0.6,
+            }}
+          >
+            Fee: ~$1.20 (paid in ETH)
           </div>
         )}
       </div>
