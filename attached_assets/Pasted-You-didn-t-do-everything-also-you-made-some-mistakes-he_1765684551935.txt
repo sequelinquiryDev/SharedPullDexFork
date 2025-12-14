@@ -1,0 +1,44 @@
+You didn't do everything,  also you made some mistakes,  here is how to fix :
+
+Remove ticker scroll completely from our app .
+MOVE "THE Main SEARCH BAR" OUT OF THE EXCHANGE CONTAINER,  PUT THE SEARCH BAR POSITION EXACTLY BENEATH THE "FLOATING ROTATING LOGO" .
+
+(From,to) inputs , not working,  users can type , but can't choose from the list ,the new selected one disappear,  check if the problem is the "main search BAR", make users always has the choice to input and reselect from any of the main search bar,  or "from,to" inputs
+
+
+I couldn't fetch the logo , so please I UPLOADED TO YOU FAVICON FILES, USE FROM THEM OUR BROWSERS ICONS AND APP LOGO , AND ALSO REPLACE (THE FLOATING ROTATING LOGO) WITH ALIGNED PICTURE WITH SIZE.
+
+
+fetching qouts and swap logics do not trigger,  no thing happenes. Run logs , try a some variety of tests.
+
+
+make sure when user is connected, he already connected to the both chains (eth,pol) AT THE SAME TIME , 
+
+
+Suggestions lists are not working perfectly,  no fast prices to show and no any details.
+Try multiple sources primary the fastest to fetch data then the best price .
+
+(my coingecko api and 0 x api ) they are in secrets, and keep others as a fallback (also the fastest,  then the best) but keep loading other prices in the background,  so if better price apears,  then switch the current one by the better 
+
+
+The fixes in "switch chain button" job is :
+
+● First of all the new  (swith chain button) should imeaditly" with semi insensible convert of the (from,to) defaults to the tokens ALIGNED with selected chain eth or pol, for example user switch from pol to eth chain the Imeadietly from,to inputs goes to (usdc,eth or even wpol as a fallback ) in ethereum chain, keep pol chain default the same 
+
+● User should never see a suggestion lists not ALIGNED with selected chain , for example if user switch to eth , all suggestions lists and tokens loads and fetch and qouts ONLY ETH CHAIN and swap logic too.
+
+● So suggestions lists and the behavior of the website acts according to only the state if the switch button,  
+DONT chane any thing else .
+
+● for example if my website is named "replitexample.com" and any one in the browser types 
+"replitexample.com/0x..any (pol,eth)contract " then the from input should show the token with that address immediately , if it's in eth , make the website "eth" state ,if it's pol then make the site pol state , smooth interaction between the contract writen in the browser and the website state.
+
+● The main search bar and other inputs,  shows and deals only what is in current website state, eth or pol.
+
+●The (disconnect wallet button) make it more professional look and thinner a little bit ,use different "purple/blue" color
+Remove the (worng chain ) handler 
+
+● Remove the connection between the appkit username and the chat , keep for the chat the default message to input a user name , but make it local storage the user name for multiple days if you can 
+
+
+● FINALLY CREATE A SERVER backend api TO READ MY SECRETS, DEAL WITH THEM as our app needs and  connect with my app with 100% SMOOTH IMTERACTION , SO MY SECRETS AND VITE SECRETS,  not exposed to the puplic or frontend of my app
