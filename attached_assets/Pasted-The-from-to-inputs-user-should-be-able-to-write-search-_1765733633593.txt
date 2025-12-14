@@ -1,0 +1,31 @@
+The from,to inputs, user should be able to write ,search and choose new token through these felds, exactly as the main search bar 
+
+Suggestions lists in (from,to)&(main search bar) should filter tokens,  according to the (switch chain button) if its eth , all searches filter eth tokens, and if it it was pol then all suggestions should be filtered to show only Polygon chain tokens, with high accuracy 
+
+I add new secret,  (VITE_CMC_API_KEY) use it. as the second primary source for prices and 24h%moves . With coingecko alongside,  switching between them every 2 minutes.  To reduce overall calls in one source. You can use the following links to make us reliable source.
+https://coinmarketcap.com/dexscan/ethereum/0x11b815efb8f581194ae79006d24e0d814b7697f6/ https://coinmarketcap.com/exchanges/uniswap-v3/ https://coinmarketcap.com/rankings/exchanges/dex/
+
+I uploaded you a logo , put it in the (floating rotating logo) instead of referring to other thing.
+If you can make a favicon from it , browsers icon,and app logo . Theat would be perfect. 
+
+Make sure that the website in both (conditions) pol or eth that
+you can get reliable sources for loading tokens,  filters them according to the website condition, and you have multiple sources to fetch icons/logos of the token .
+
+Please make sure that you visit this website https://docs.reown.com/appkit/react/core/installation
+to understand how to implement appkit,  and do the same , because by this way user can sign in using gmail ,x or wallet too ...
+
+Make sure that chat system asks new user to choose a user name only after checking if the user is connected and have appkit username ,or not , if not then our current default ask continue. 
+
+Revise the swap button logic,  make sure it can handle both chains at the same time , and also user have smoothly guided through the transaction,  as any other large companies like uniswap or DODOEX.  For smooth swap experince. And themed giudlines , themed like the website theme. With handling all possible issues LIKE USER HAS NO FUND issue . PROFESSIONALLY 
+Run logs to make sure that 0x is always primary and READY to provide qouts and liquidity for the transaction. Run logs again to check now that any tokens in eth or pol can be swapped .
+
+
+Change eth DEFAULTS to refer for actual ethereum coin , and usdc fallback to usdt. All within the eth chain of course , keep pol DEFAULTS the same
+
+
+Make sure that the SERVER backend api , to secure our all secrets and configrations including the new eth configuration which you will add, BECAUSE WE MISS ETH CONFIGURATIONS
+
+In "eth" condition our fee is 1.2$ collected in eth coin , but calculate in USDC for stability,  
+In "pol" keep the same
+
+ IF MY WEBSITE (EXAMPLE.COM) I WANT TO MAKE IT also ABLE TO INPUT TOKENS IN THE FROM INPUT DIRECTLY FROM the URL (EXAMPLE.COM/0x?..any eth or pol address) . But if the address is eth address then the app state convert automatically to (eth state) if the url included pol address then the app automatically opens in (pol state) , making it flixable
