@@ -1,0 +1,27 @@
+Specific certain new quick but professional tasks.
+
++The (connect/disconnect) wallet button , keep the style but reduce the size to make it thinner, also make them "connect/disconnect" auto RESIZE for the best, according to the screen size , to preserve the look and over flow/lap . specifically in small screens.
+
+
++ In The texts ticker in (from/to) inputs , the normalization working in a wrong way , preventing the text from referring to the (new or current choices).
+
++Eth DEFAULTS (to) you there is a problem in show the accurate price , it feching wrong , or it'snot decimals aware
+
++Make sure all secrets applied fetched from our server,  to protect it , and tell me how to migrate this project to my cloudflare. 
+
++The swap logic triggering not working i think , try use other more relible way to trigger smooth qouts and transactions. And it is flexible to the website mode (pol/eth/brg). With smooth the wallet connection . 
+ 
++Revise and check bugs in:
+Swap button in (POL) mode initiate pol chain (qouts,transactions process..erc) from 0x/lifi
+Swap button in (ETG) mode initiate eth chain (qouts,transactions process..etc) from 0x/lifi
+In (BRG) mode swap button read both (from/to) inputs if they are in the same chain use 0x/lifi technic,  if they are opposed in chains then it initiate lifi bridging process ...etc
+
+Finally and must do task
+
++The exchange container is not entirely flexible to the small screens sizes. Especially price is overflowing out of the container, Make the inputs (from/to,amount/estimate) flexible and they reduce their size accordingly to the small screen size. 
+
++The texts of the prices and 24h%move also some times it get out of the container,  or overlapping it (from/to) inputs, make them stable inside the container no over lap/flow. 
+They have multiple sizes according to the spaces available inside the container.  Use smart algos .
++in the suggestions some are prioritized by market cap , make the once prioritized by market cap also after that they get prioritized by 24h v 
+
+Run logs
