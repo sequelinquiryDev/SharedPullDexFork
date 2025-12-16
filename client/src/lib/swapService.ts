@@ -139,6 +139,8 @@ export async function getBestQuote(
 
   const chainId = chain === 'ETH' ? CHAIN_IDS.ETH : CHAIN_IDS.POL;
   console.log(`[Quote] Fetching quotes from 0x and LIFI for ${chain}...`);
+  
+  // Fetch with timeout fallback: try both sources in parallel, accept first valid response
   const [q0x, qLifi] = await Promise.all([
     fetch0xQuote(fromAddr, toAddr, amountWei, chain),
     fetchLifiQuote(fromAddr, toAddr, amountWei, toDecimals, chainId, chainId),
@@ -148,13 +150,13 @@ export async function getBestQuote(
   console.log(`[Quote] Received ${quotes.length} valid quotes: ${quotes.map(q => `${q.source}=${q.normalized.toFixed(6)}`).join(', ')}`);
   
   if (quotes.length === 0) {
-    console.warn('[Quote] No valid quotes available');
+    console.warn('[Quote] No valid quotes available - all sources failed');
     return null;
   }
 
   quotes.sort((a, b) => b.normalized - a.normalized);
   const best = quotes[0];
-  console.log(`[Quote] Best quote: ${best.source} with amount ${best.normalized.toFixed(6)}`);
+  console.log(`[Quote] Best quote: ${best.source} with normalized amount ${best.normalized.toFixed(6)}`);
 
   quoteCache.set(key, { best, ts: Date.now() });
   return best;

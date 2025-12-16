@@ -96,18 +96,22 @@ function getLifiApiKey(): string {
   return process.env.VITE_LIFI_API_KEY || '';
 }
 
-// Get new multi-chain API key (protected on server)
+// Get new multi-chain API key (PROTECTED SERVER-SIDE - never expose to frontend)
 function getEthPolApiKey(): string {
-  return process.env.VITE_ETH_POL_API || '';
+  const key = process.env.VITE_ETH_POL_API || '';
+  if (!key) console.warn('[Security] VITE_ETH_POL_API not configured');
+  return key;
 }
 
-// Get RPC URLs (protected on server)
+// Get RPC URLs (PROTECTED SERVER-SIDE - never expose to frontend)
 function getEthRpcUrl(): string {
-  return process.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com';
+  const url = process.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com';
+  return url;
 }
 
 function getPolRpcUrl(): string {
-  return process.env.VITE_POL_RPC_URL || 'https://polygon-rpc.com';
+  const url = process.env.VITE_POL_RPC_URL || 'https://polygon-rpc.com';
+  return url;
 }
 
 // Alternating source for token prices

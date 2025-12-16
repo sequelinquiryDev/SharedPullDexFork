@@ -253,17 +253,17 @@ export function TokenInput({
   return (
     <div className="input-box" style={{ position: 'relative' }} ref={containerRef} data-testid={`input-box-${side}`}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
-        {/* Uniswap-style ticker chip: icon + symbol together */}
+        {/* Merged ticker + icon chip input - single unified input field */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
-          padding: '4px 8px',
+          padding: '0px 8px',
           borderRadius: '8px',
           background: 'rgba(255,255,255,0.04)',
           border: '1px solid rgba(255,255,255,0.08)',
           flexShrink: 0,
-          minWidth: selectedToken ? 'auto' : 0,
+          flex: selectedToken ? undefined : 0,
         }}>
           <div className="token-icon" style={{ position: 'relative', width: '28px', height: '28px' }}>
             {selectedToken?.logoURI ? (
@@ -279,11 +279,28 @@ export function TokenInput({
               <img src={getPlaceholderImage()} alt="Select token" />
             )}
           </div>
-          {selectedToken && (
-            <span style={{ fontSize: '13px', fontWeight: 700, minWidth: 'auto' }}>
-              {selectedToken.symbol}
-            </span>
-          )}
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder={chain === 'BRG' ? 'ETH & POL' : `${chain} tokens`}
+            value={searchQuery}
+            onChange={handleInputChange}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            style={{
+              padding: '10px 8px',
+              borderRadius: '0px',
+              border: 'none',
+              background: 'transparent',
+              color: '#fff',
+              width: '100%',
+              outline: 'none',
+              fontSize: '13px',
+              fontWeight: selectedToken ? 700 : 400,
+              minWidth: '60px',
+            }}
+            data-testid={`input-token-search-${side}`}
+          />
         </div>
 
         {selectedToken && change !== null && change !== undefined && (
@@ -299,29 +316,6 @@ export function TokenInput({
             {change.toFixed(2)}%
           </div>
         )}
-
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder={chain === 'BRG' ? 'Search ETH & POL tokens...' : `Search ${chain} tokens...`}
-            value={searchQuery}
-            onChange={handleInputChange}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            style={{
-              padding: '10px 12px',
-              borderRadius: '8px',
-              border: 'none',
-              background: 'transparent',
-              color: '#fff',
-              width: '100%',
-              outline: 'none',
-              fontSize: '14px',
-            }}
-            data-testid={`input-token-search-${side}`}
-          />
-        </div>
 
         <div style={{ marginLeft: '8px', minWidth: '120px' }}>
           <input

@@ -17,8 +17,8 @@ interface ExtendedToken extends Token {
 
 // ETH chain: ETH (native) -> USDC (verified contract addresses)
 const ETHEREUM_DEFAULTS = {
-  fromToken: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // ETH (native - 0x standard)
-  toToken: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC (verified Ethereum mainnet)
+  fromToken: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // ETH native token
+  toToken: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC verified contract
 };
 
 // POL chain: USDC.e (bridged) -> WETH (verified contract addresses)
