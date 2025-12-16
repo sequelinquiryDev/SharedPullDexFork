@@ -723,6 +723,14 @@ export default function Home() {
         )}
 
       </div>
+      <TokenInfoSidebar 
+        fromToken={fromToken} 
+        toToken={toToken} 
+        fromPriceUsd={fromPriceUsd}
+        toPriceUsd={toPriceUsd}
+        fromChange24h={fromToken ? (getCgStatsMap(getTokenChainId(fromToken)).get(low(fromToken.symbol))?.change ?? null) : null}
+        toChange24h={toToken ? (getCgStatsMap(getTokenChainId(toToken)).get(low(toToken.symbol))?.change ?? null) : null}
+      />
     </div>
   );
 }

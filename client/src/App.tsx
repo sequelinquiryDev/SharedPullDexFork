@@ -44,7 +44,6 @@ function App() {
             <OnboardingGuide />
             <Router />
             <ChatPanel />
-            <TokenInfoSidebar fromToken={null} toToken={null} fromPriceUsd={null} toPriceUsd={null} />
             <ToolsButton />
             <Footer />
             <ToastContainer />

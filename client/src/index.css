@@ -1385,19 +1385,19 @@ body.eth-chain .glassy-btn.connected {
 
 .token-info-container {
   position: fixed;
-  bottom: 150px;
-  left: 10px;
-  width: 280px;
-  padding: 14px;
-  background: linear-gradient(135deg, rgba(92,234,212,0.08), rgba(76,224,193,0.05));
-  border: 1px solid rgba(92,234,212,0.2);
-  border-radius: 14px;
+  bottom: 155px;
+  left: 18px;
+  width: 140px;
+  padding: 8px;
+  background: linear-gradient(135deg, rgba(92,234,212,0.12), rgba(76,224,193,0.08));
+  border: 1px solid rgba(92,234,212,0.25);
+  border-radius: 10px;
   backdrop-filter: blur(12px);
-  z-index: 49;
-  max-height: 50vh;
+  z-index: 999;
+  max-height: 35vh;
   overflow-y: auto;
-  animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-  box-shadow: 0 8px 24px rgba(92,234,212,0.1);
+  animation: slideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 8px 24px rgba(92,234,212,0.15);
 }
 
 @keyframes slideUp {
@@ -1413,11 +1413,12 @@ body.eth-chain .glassy-btn.connected {
 
 .token-info-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .token-info-row:last-child {
@@ -1429,28 +1430,28 @@ body.eth-chain .glassy-btn.connected {
 .token-info-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 1;
+  gap: 6px;
+  width: 100%;
   min-width: 0;
 }
 
 .token-info-header img {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
 .token-symbol {
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 700;
   color: #fff;
   white-space: nowrap;
 }
 
 .token-name {
-  font-size: 9px;
-  opacity: 0.6;
+  font-size: 7px;
+  opacity: 0.5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1459,19 +1460,20 @@ body.eth-chain .glassy-btn.connected {
 .token-info-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  font-size: 10px;
-  flex-shrink: 0;
+  gap: 4px;
+  font-size: 8px;
+  width: 100%;
 }
 
 .stat-label {
-  opacity: 0.6;
-  margin-bottom: 2px;
+  opacity: 0.5;
+  margin-bottom: 1px;
+  font-size: 7px;
 }
 
 .stat-value {
   font-weight: 700;
-  font-size: 11px;
+  font-size: 8px;
 }
 
 /* ===== FOCUS STATES ===== */
