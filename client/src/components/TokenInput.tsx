@@ -166,19 +166,25 @@ export function TokenInput({
   const handleBlur = () => {
     setTimeout(() => {
       setShowSuggestions(false);
+      if (selectedToken) {
+        setSearchQuery(selectedToken.symbol.toUpperCase());
+      } else {
+        setSearchQuery('');
+      }
     }, 200);
   };
 
   const handleSelectToken = (token: Token) => {
     onTokenSelect(token);
-    setSearchQuery(token.symbol);
+    setSearchQuery(token.symbol.toUpperCase());
     setShowSuggestions(false);
     inputRef.current?.blur();
   };
 
   // Keep ticker visible when token is selected but allow user typing
+  // Always normalize to uppercase and sync when selectedToken changes
   useEffect(() => {
-    if (selectedToken && !searchQuery) {
+    if (selectedToken) {
       setSearchQuery(selectedToken.symbol.toUpperCase());
     }
   }, [selectedToken]);
