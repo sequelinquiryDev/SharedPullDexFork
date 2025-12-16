@@ -1,0 +1,43 @@
+Attached file
+Pasted-Do-not-activate-normal-agent-just-process-the-following_1765893071417.txt
+Do not activate normal agent,  just process the following even if it needed autonomous dont activate it.
+
+Make a button (SIZED AND THEMED EXACTLY AS the ifram button and switch chain button) 
+It sits professionally exactly above the iframe button ( smae size , same theme ).
+
+that opens very small rect angle side bar and themed glassy like the website : 
+
++flexible and have variety of sizes , according to the screens size and used phone.
++ doesn't overlap or has over flow contents.
+ 
++ shows only  "selected tokens" in from/to, or one if the other has no data . 
+
+With sparkline into canvas using professional data and array of numbers. Small , active,  and SMOOTH AUTO REFRESH EVERY 10 MIN , USE COINMARKET CAP API AND COINGECKO FOR DATA , WITH SMART SEQUENCES  (THEMED EXACTLY AS THE WEBSITE,  AND THE HUES IS FLEXIBLE TO THE MOOD , LIKE OTHERS.
+Create ultra-minimal financial sparklines rendered on HTML <canvas>, optimized for dark crypto dashboards.
+
+Each sparkline is 100px × 36px, transparent background, drawn with anti-aliased rounded strokes.
+
+Plot 30 recent price points as a single continuous line, normalized between min/max values.
+
+Use 1.6px line width, round line caps and joins, with 2px internal padding on all sides.
+
+Color logic:
+• Positive trend → neon teal line rgba(92,234,212,0.95)
+• Negative trend → soft violet line rgba(124,58,237,0.95)
+
+Add a terminal dot at the last data point:
+• Green rgba(18,183,106,0.95) for uptrend
+• Red rgba(255,107,107,0.95) for downtrend
+Dot radius ≈ 2.4px
+
+No grid, no axes, no fill — line only.
+
+High-DPI aware: scale canvas by devicePixelRatio for crisp rendering.
+
+Visual style: clean, modern, market-grade, similar to CoinMarketCap / TradingView micro-sparks, designed to sit inline inside a token row without visual noise. So in summary Minimal dark-UI crypto sparkline: 100×36 canvas, 30 points, rounded 1.6px stroke, teal for uptrend, violet for downtrend, terminal dot (green/red
+
++ALSO it shows for both tokens the Price, 24h%moves, volume. All very themed , flexible size and NO OVER FLOW OUT OF THE SIDE BAR CONTAINER .
+
++++++ Remove the 24h%move from the selected tokens in the exchange container, 
+Make sure the the prices in other side do not overflowing the container.
+Run log and debug the defaults in switching in chains, cheack if defaults is changed smoothly,  ACCURATELY,  except (BRG) dont have defaults it should keep what ever in the container 
