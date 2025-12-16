@@ -179,7 +179,7 @@ export function TokenInput({
   // Keep ticker visible when token is selected but allow user typing
   useEffect(() => {
     if (selectedToken && !searchQuery) {
-      setSearchQuery(selectedToken.symbol);
+      setSearchQuery(selectedToken.symbol.toUpperCase());
     }
   }, [selectedToken]);
 
