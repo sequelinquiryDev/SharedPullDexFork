@@ -304,19 +304,6 @@ export function TokenInput({
           />
         </div>
 
-        {selectedToken && change !== null && change !== undefined && (
-          <div
-            style={{
-              fontSize: '12px',
-              opacity: 0.95,
-              color: change >= 0 ? '#9ef39e' : '#ff9e9e',
-            }}
-            data-testid={`text-change-${side}`}
-          >
-            {change >= 0 ? '+' : ''}
-            {change.toFixed(2)}%
-          </div>
-        )}
 
         <div style={{ marginLeft: '8px', minWidth: '120px' }}>
           <input

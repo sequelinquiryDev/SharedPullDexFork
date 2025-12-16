@@ -4,8 +4,9 @@ import { ethers } from 'ethers';
 import { useLocation } from 'wouter';
 import { TokenInput } from '@/components/TokenInput';
 import { SlippageControl } from '@/components/SlippageControl';
+import { TokenInfoSidebar } from '@/components/TokenInfoSidebar';
 import { showToast } from '@/components/Toast';
-import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress } from '@/lib/tokenService';
+import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress, getCgStatsMap } from '@/lib/tokenService';
 import { getBestQuote, getLifiBridgeQuote, executeSwap, approveToken, checkAllowance, parseSwapError, QuoteResult } from '@/lib/swapService';
 import { config, ethereumConfig, low, isAddress } from '@/lib/config';
 import { useChain, ChainType, chainConfigs } from '@/lib/chainContext';
@@ -676,6 +677,18 @@ export default function Home() {
             <SlippageControl value={slippage} onChange={setSlippage} />
           </div>
         </div>
+
+        {/* Token Info Sidebar */}
+        {(fromToken || toToken) && (
+          <TokenInfoSidebar
+            fromToken={fromToken}
+            toToken={toToken}
+            fromPriceUsd={fromPriceUsd}
+            toPriceUsd={toPriceUsd}
+            fromChange24h={fromToken ? getCgStatsMap(chainId).get(fromToken.symbol.toLowerCase())?.change : null}
+            toChange24h={toToken ? getCgStatsMap(chainId).get(toToken.symbol.toLowerCase())?.change : null}
+          />
+        )}
 
         <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'center' }}>
           <button
