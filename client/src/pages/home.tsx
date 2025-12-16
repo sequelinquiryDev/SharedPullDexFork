@@ -16,9 +16,10 @@ interface ExtendedToken extends Token {
 }
 
 // ETH chain: ETH (native) -> USDC (verified contract addresses)
+// Verified: https://etherscan.io/token/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48
 const ETHEREUM_DEFAULTS = {
-  fromToken: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // ETH native token
-  toToken: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC verified contract
+  fromToken: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // ETH native (0x standard)
+  toToken: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC Ethereum (verified mainnet)
 };
 
 // POL chain: USDC.e (bridged) -> WETH (verified contract addresses)
@@ -83,11 +84,14 @@ export default function Home() {
   };
 
   // Get user balance for from token (use token's chainId in BRG mode)
-  const fromTokenChainId = fromToken ? getTokenChainId(fromToken) : (chain === 'ETH' ? 1 : 137);
+  const fromTokenChainId = (() => {
+    const chainIdVal = fromToken ? getTokenChainId(fromToken) : (chain === 'ETH' ? 1 : 137);
+    return (chainIdVal === 1 || chainIdVal === 137) ? chainIdVal : 137;
+  })();
   
   const { data: nativeBalance } = useBalance({
     address: address,
-    chainId: fromTokenChainId,
+    chainId: fromTokenChainId as 1 | 137,
   });
 
   const { data: tokenBalance } = useBalance({
@@ -95,7 +99,7 @@ export default function Home() {
     token: fromToken && !isNativeToken(fromToken.address)
       ? fromToken.address as `0x${string}` 
       : undefined,
-    chainId: fromTokenChainId,
+    chainId: fromTokenChainId as 1 | 137,
   });
 
   // Check balance and set insufficient funds state
@@ -251,10 +255,17 @@ export default function Home() {
         previousChainRef.current = newChain;
         
         // For BRG mode, preserve user's token selections; for other modes, reset
-        const isBrgMode = newChain === 'BRG' && prevChain !== 'BRG';
+        const enteringBrgMode = newChain === 'BRG' && prevChain !== 'BRG';
+        const leavingBrgMode = newChain !== 'BRG' && prevChain === 'BRG';
         
-        if (!isBrgMode) {
-          // Clear all state on non-BRG chain switch
+        if (enteringBrgMode) {
+          // BRG mode: keep token selections, just clear quotes and amounts
+          setFromAmount('');
+          setToAmount('');
+          setQuote(null);
+          console.log(`[ChainSwitch] Entered BRG mode, preserving token selections`);
+        } else if (leavingBrgMode) {
+          // Leaving BRG mode: reset all and load defaults for new chain
           setFromAmount('');
           setToAmount('');
           setQuote(null);
@@ -265,16 +276,24 @@ export default function Home() {
           setFromToken(null);
           setToToken(null);
           
-          // Load new default tokens for the chain
           setDefaultTokensForChain(newChain).then(() => {
             console.log(`[ChainSwitch] Default tokens loaded for ${newChain}`);
           });
         } else {
-          // BRG mode: keep token selections, just clear quotes and amounts
+          // Switching between non-BRG chains: reset all
           setFromAmount('');
           setToAmount('');
           setQuote(null);
-          console.log(`[ChainSwitch] Entered BRG mode, preserving token selections`);
+          setFromPriceUsd(null);
+          setToPriceUsd(null);
+          setInsufficientFunds(false);
+          setUserBalance(null);
+          setFromToken(null);
+          setToToken(null);
+          
+          setDefaultTokensForChain(newChain).then(() => {
+            console.log(`[ChainSwitch] Default tokens loaded for ${newChain}`);
+          });
         }
       }
     });
@@ -474,6 +493,11 @@ export default function Home() {
 
       setQuote(bestQuote);
       console.log(`[Swap] Got quote from ${bestQuote.source}`);
+      
+      // Show warning if using fallback quote due to slippage mismatch
+      if (bestQuote.source === 'lifi' && slippage < 1) {
+        showToast(`⚠️ Using alternative quote with ${slippage}% slippage. Best price may have changed. Proceed?`, { type: 'warn', ttl: 6000 });
+      }
 
       const provider = new ethers.providers.Web3Provider(window.ethereum as any);
       const signer = provider.getSigner();

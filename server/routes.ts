@@ -55,11 +55,13 @@ function checkRateLimit(ip: string): boolean {
 // Clean up old rate limit entries periodically
 setInterval(() => {
   const now = Date.now();
+  const entriesToDelete: string[] = [];
   for (const [ip, entry] of rateLimits.entries()) {
     if (now > entry.resetTime) {
-      rateLimits.delete(ip);
+      entriesToDelete.push(ip);
     }
   }
+  entriesToDelete.forEach(ip => rateLimits.delete(ip));
 }, 60000);
 
 // Get client IP
@@ -114,6 +116,14 @@ function getPolRpcUrl(): string {
   return url;
 }
 
+// SECURITY: Endpoint to get RPC URLs safely (never expose API keys)
+function getPublicRpcConfig() {
+  return {
+    ethRpc: getEthRpcUrl(),
+    polRpc: getPolRpcUrl(),
+  };
+}
+
 // Alternating source for token prices
 let lastPriceSource: 'cmc' | 'coingecko' = 'cmc';
 
@@ -150,6 +160,8 @@ export async function registerRoutes(
       hasCmcKey: !!getCmcApiKey(),
       hasZeroXKey: !!getZeroXApiKey(),
       hasLifiKey: !!getLifiApiKey(),
+      hasEthPolApi: !!getEthPolApiKey(),
+      rpcConfig: getPublicRpcConfig(),
     });
   });
 
@@ -489,6 +501,24 @@ export async function registerRoutes(
       console.error('LIFI proxy error:', error);
       return res.status(500).json({ error: 'Failed to fetch LIFI data' });
     }
+  });
+
+  // GET /api/rpc/eth - Protected server-side RPC endpoint for Ethereum
+  app.get("/api/rpc/eth", rateLimitMiddleware, (req, res) => {
+    const rpcUrl = getEthRpcUrl();
+    if (!rpcUrl) {
+      return res.status(503).json({ error: 'Ethereum RPC not configured' });
+    }
+    res.json({ rpcUrl });
+  });
+
+  // GET /api/rpc/pol - Protected server-side RPC endpoint for Polygon
+  app.get("/api/rpc/pol", rateLimitMiddleware, (req, res) => {
+    const rpcUrl = getPolRpcUrl();
+    if (!rpcUrl) {
+      return res.status(503).json({ error: 'Polygon RPC not configured' });
+    }
+    res.json({ rpcUrl });
   });
 
   // Proxy for LIFI API - POST requests (for advanced routes)

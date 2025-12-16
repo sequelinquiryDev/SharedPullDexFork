@@ -5,8 +5,8 @@ export const config = {
   coingeckoChain: import.meta.env.VITE_COINGECKO_CHAIN || 'polygon-pos',
   coingeckoApiKey: import.meta.env.VITE_COINGECKO_API_KEY || '',
   rpcUrls: [
-    import.meta.env.VITE_POL_RPC_URL || 'https://polygon-rpc.com',
-    import.meta.env.VITE_RPC_URL_1 || 'https://rpc-mainnet.maticvigil.com',
+    'https://polygon-rpc.com', // Use public RPC by default
+    'https://rpc-mainnet.maticvigil.com',
   ],
   oneInchBase: import.meta.env.VITE_ONEINCH_BASE || 'https://api.1inch.io/v5.0/137',
   zeroXBase: import.meta.env.VITE_ZEROX_BASE || 'https://polygon.api.0x.org',
@@ -34,7 +34,7 @@ export const ethereumConfig = {
   chainName: 'Ethereum',
   coingeckoChain: 'ethereum',
   rpcUrls: [
-    import.meta.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com',
+    'https://eth.llamarpc.com', // Use public RPC by default
     'https://rpc.ankr.com/eth',
   ],
   oneInchBase: 'https://api.1inch.io/v5.0/1',

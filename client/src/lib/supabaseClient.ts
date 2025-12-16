@@ -1,21 +1,38 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+// Only create client if both credentials are valid URLs/keys
+const isValidUrl = (url: string) => {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase credentials missing. Chat will not work.');
+  console.warn('[Supabase] Credentials missing. Chat will not work.');
 }
 
-export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      realtime: {
-        params: {
-          eventsPerSecond: 10,
-        },
-      },
-    })
+export const supabase = (supabaseUrl && supabaseAnonKey && isValidUrl(supabaseUrl))
+  ? (() => {
+      try {
+        return createClient(supabaseUrl, supabaseAnonKey, {
+          realtime: {
+            params: {
+              eventsPerSecond: 10,
+            },
+          },
+        });
+      } catch (e) {
+        console.warn('[Supabase] Failed to initialize:', e);
+        return null;
+      }
+    })()
   : null;
 
 export async function fetchMessages() {

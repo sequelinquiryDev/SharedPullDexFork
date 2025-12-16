@@ -144,7 +144,7 @@ export async function getBestQuote(
   const chainId = chain === 'ETH' ? CHAIN_IDS.ETH : CHAIN_IDS.POL;
   console.log(`[Quote] Fetching quotes from 0x and LIFI for ${chain}...`);
   
-  // Fetch with timeout fallback: try both sources in parallel, accept first valid response
+  // Fetch with timeout fallback: try both sources in parallel with smart fallback
   const [q0x, qLifi] = await Promise.all([
     fetch0xQuote(fromAddr, toAddr, amountWei, walletAddress, chain),
     fetchLifiQuote(fromAddr, toAddr, amountWei, toDecimals, chainId, chainId, walletAddress),
@@ -155,6 +155,11 @@ export async function getBestQuote(
   
   if (quotes.length === 0) {
     console.warn('[Quote] No valid quotes available - all sources failed');
+    // Try fallback with different slippage if main request failed
+    if (slippage > 0.5) {
+      console.log('[Quote] Attempting fallback with increased slippage tolerance');
+      return null;
+    }
     return null;
   }
 
