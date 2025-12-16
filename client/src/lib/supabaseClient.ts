@@ -1,39 +1,28 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Only create client if both credentials are valid URLs/keys
-const isValidUrl = (url: string) => {
+let supabase: ReturnType<typeof createClient> | null = null;
+
+if (supabaseUrl && supabaseAnonKey) {
   try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
+    supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
+      },
+    });
+  } catch (e) {
+    console.warn('[Supabase] Failed to initialize:', e);
   }
-};
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[Supabase] Credentials missing. Chat will not work.');
+} else {
+  console.warn('[Supabase] Missing credentials (VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY). Chat will not work.');
 }
 
-export const supabase = (supabaseUrl && supabaseAnonKey && isValidUrl(supabaseUrl))
-  ? (() => {
-      try {
-        return createClient(supabaseUrl, supabaseAnonKey, {
-          realtime: {
-            params: {
-              eventsPerSecond: 10,
-            },
-          },
-        });
-      } catch (e) {
-        console.warn('[Supabase] Failed to initialize:', e);
-        return null;
-      }
-    })()
-  : null;
+export { supabase };
 
 export async function fetchMessages() {
   if (!supabase) return [];
@@ -51,7 +40,7 @@ export async function fetchMessages() {
     }
 
     // Map to expected format
-    return (data || []).map(msg => ({
+    return (data || []).map((msg: any) => ({
       id: msg.id,
       username: msg.user,
       message: msg.text,
@@ -95,11 +84,11 @@ export function subscribeToMessages(callback: (message: any) => void) {
         schema: 'public',
         table: 'chat_messages',
       },
-      (payload) => {
+      (payload: any) => {
         callback(payload.new);
       }
     )
-    .subscribe((status) => {
+    .subscribe((status: any) => {
       console.log('Subscription status:', status);
     });
 
