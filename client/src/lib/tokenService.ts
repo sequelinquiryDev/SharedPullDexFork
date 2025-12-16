@@ -103,16 +103,12 @@ async function fetchCoinGeckoMarketData(): Promise<Map<string, TokenStats>> {
   const statsMap = new Map<string, TokenStats>();
   
   try {
-    const headers: Record<string, string> = {};
-    if (config.coingeckoApiKey) {
-      headers['x-cg-pro-api-key'] = config.coingeckoApiKey;
-    }
-    
-    const marketsUrl = `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false&price_change_percentage=24h`;
-    const response = await fetchWithTimeout(marketsUrl, { headers }, 10000);
+    // Use server proxy to avoid CORS and protect API keys
+    const marketsUrl = `/api/prices/coingecko/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false&price_change_percentage=24h`;
+    const response = await fetchWithTimeout(marketsUrl, {}, 10000);
     
     if (!response.ok) {
-      throw new Error(`CoinGecko API returned ${response.status}`);
+      throw new Error(`CoinGecko proxy returned ${response.status}`);
     }
     
     const data = await response.json();
@@ -223,34 +219,7 @@ export async function loadTokensForChain(chainId: number): Promise<void> {
       });
     }
 
-    try {
-      const oneInchBase = chainId === 1 
-        ? ethereumConfig.oneInchBase 
-        : config.oneInchBase;
-      
-      const r1 = await fetch(`${oneInchBase}/tokens`);
-      const j1 = await r1.json();
-      
-      if (j1 && j1.tokens) {
-        Object.values(j1.tokens as Record<string, any>).forEach((t: any) => {
-          const addr = low(t.address || '');
-          if (!addr) return;
-          if (tokenMap.has(addr)) return;
-          
-          const obj: Token = {
-            address: addr,
-            symbol: t.symbol || '',
-            name: t.name || '',
-            decimals: t.decimals || 18,
-            logoURI: t.logoURI || '',
-          };
-          tokenList.push(obj);
-          tokenMap.set(addr, obj);
-        });
-      }
-    } catch (e) {
-      console.warn('1inch tokens fetch failed:', e);
-    }
+    // Skip 1inch direct API call - use CoinGecko/Uniswap token lists only (more reliable)
 
     const seen = new Set<string>();
     tokenList = tokenList.filter((t) => {
@@ -345,12 +314,9 @@ async function fetchCoingeckoSimple(addr: string, chainId?: number): Promise<num
   const network = chainIdToCoingeckoNetwork[cid] || 'polygon-pos';
   
   try {
-    const headers: Record<string, string> = {};
-    if (config.coingeckoApiKey) {
-      headers['x-cg-pro-api-key'] = config.coingeckoApiKey;
-    }
-    const url = `https://api.coingecko.com/api/v3/simple/token_price/${network}?contract_addresses=${addr}&vs_currencies=usd`;
-    const res = await fetchWithTimeout(url, { headers }, 3000);
+    // Use server proxy to avoid CORS and protect API keys
+    const url = `/api/prices/coingecko/simple/token_price/${network}?contract_addresses=${addr}&vs_currencies=usd`;
+    const res = await fetchWithTimeout(url, {}, 3000);
     if (!res.ok) throw new Error('cg simple non-ok');
     const j = await res.json();
     const v = j[low(addr)]?.usd ?? null;

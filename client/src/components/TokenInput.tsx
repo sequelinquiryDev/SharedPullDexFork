@@ -171,10 +171,17 @@ export function TokenInput({
 
   const handleSelectToken = (token: Token) => {
     onTokenSelect(token);
-    setSearchQuery('');
+    setSearchQuery(token.symbol);
     setShowSuggestions(false);
     inputRef.current?.blur();
   };
+
+  // Keep ticker visible when token is selected but allow user typing
+  useEffect(() => {
+    if (selectedToken && !searchQuery) {
+      setSearchQuery(selectedToken.symbol);
+    }
+  }, [selectedToken]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
