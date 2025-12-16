@@ -4,25 +4,19 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-let supabase: ReturnType<typeof createClient> | null = null;
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase credentials missing. Chat will not work.');
+}
 
-if (supabaseUrl && supabaseAnonKey) {
-  try {
-    supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey, {
       realtime: {
         params: {
           eventsPerSecond: 10,
         },
       },
-    });
-  } catch (e) {
-    console.warn('[Supabase] Failed to initialize:', e);
-  }
-} else {
-  console.warn('[Supabase] Missing credentials (VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY). Chat will not work.');
-}
-
-export { supabase };
+    })
+  : null;
 
 export async function fetchMessages() {
   if (!supabase) return [];
@@ -40,7 +34,7 @@ export async function fetchMessages() {
     }
 
     // Map to expected format
-    return (data || []).map((msg: any) => ({
+    return (data || []).map(msg => ({
       id: msg.id,
       username: msg.user,
       message: msg.text,
@@ -84,11 +78,11 @@ export function subscribeToMessages(callback: (message: any) => void) {
         schema: 'public',
         table: 'chat_messages',
       },
-      (payload: any) => {
+      (payload) => {
         callback(payload.new);
       }
     )
-    .subscribe((status: any) => {
+    .subscribe((status) => {
       console.log('Subscription status:', status);
     });
 
