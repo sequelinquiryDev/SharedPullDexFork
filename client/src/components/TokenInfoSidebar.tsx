@@ -77,13 +77,38 @@ export function TokenInfoSidebar({
   toChange24h,
 }: TokenInfoSidebarProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLDivElement>(null);
 
   const hasTokens = fromToken || toToken;
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        isOpen &&
+        containerRef.current &&
+        buttonRef.current &&
+        !containerRef.current.contains(e.target as Node) &&
+        !buttonRef.current.contains(e.target as Node)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
   return (
     <>
-      {/* Button - matches ToolsButton styling */}
+      {/* Button - Mini Radar */}
       <div
+        ref={buttonRef}
         className="token-info-button"
         onClick={() => hasTokens && setIsOpen(!isOpen)}
         style={{ opacity: hasTokens ? 1 : 0.5, cursor: hasTokens ? 'pointer' : 'not-allowed' }}
@@ -92,12 +117,12 @@ export function TokenInfoSidebar({
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
         </svg>
-        <div className="token-info-text">{isOpen ? 'Hide Info' : 'Token Info'}</div>
+        <div className="token-info-text">{isOpen ? 'Hide' : 'Mini Radar'}</div>
       </div>
 
       {/* Sidebar */}
       {isOpen && (
-        <div className="token-info-container" data-testid="sidebar-token-info">
+        <div ref={containerRef} className="token-info-container" data-testid="sidebar-token-info">
           {fromToken && (
             <div className="token-info-row">
               <div className="token-info-header">

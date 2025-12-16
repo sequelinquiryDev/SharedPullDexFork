@@ -40,6 +40,13 @@ export function TokenInput({
   const containerRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Update searchQuery when selectedToken changes
+  useEffect(() => {
+    if (selectedToken) {
+      setSearchQuery(selectedToken.symbol.toUpperCase());
+    }
+  }, [selectedToken?.address]);
+
   const handleSearch = useCallback(async (query: string) => {
     // BRG mode: search both chains; otherwise single chain
     const chainIds = chain === 'BRG' ? [1, 137] : [chain === 'ETH' ? 1 : 137];
