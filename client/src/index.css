@@ -1319,7 +1319,7 @@ body.eth-chain .glassy-btn.connected {
 /* ===== TOKEN SEARCH BAR =================== */
 .token-search-bar-container {
   position: fixed;
-  top: calc(6vh + 84px + 16px);
+  top: calc(6vh + 84px + 40px);
   left: 50%;
   transform: translateX(-50%);
   width: 90%;

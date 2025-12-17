@@ -3,9 +3,9 @@ export function Logo() {
     <div className="logo-container">
       <div className="logo-3d-wrapper">
         {/* Dynamic Aura effects - replaces gold balls */}
-        <div className="aura aura-primary"></div>
-        <div className="aura aura-secondary"></div>
-        <div className="aura aura-accent"></div>
+        <div className="aura aura-primary logo-aura-animated"></div>
+        <div className="aura aura-secondary logo-aura-animated" style={{ animationDelay: '0.4s' }}></div>
+        <div className="aura aura-accent logo-aura-animated" style={{ animationDelay: '0.8s' }}></div>
         
         {/* 3D Logo layers */}
         <div className="logo-3d-layer layer-1">
