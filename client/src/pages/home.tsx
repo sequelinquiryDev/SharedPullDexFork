@@ -6,7 +6,7 @@ import { TokenInput } from '@/components/TokenInput';
 import { SlippageControl } from '@/components/SlippageControl';
 import { TokenInfoSidebar } from '@/components/TokenInfoSidebar';
 import { showToast } from '@/components/Toast';
-import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress, getCgStatsMap, getStatsByTokenAddress } from '@/lib/tokenService';
+import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress, getCgStatsMap, getStatsByTokenAddress, getHistoricalPriceData } from '@/lib/tokenService';
 import { getBestQuote, getLifiBridgeQuote, executeSwap, approveToken, checkAllowance, parseSwapError, QuoteResult } from '@/lib/swapService';
 import { config, ethereumConfig, low, isAddress } from '@/lib/config';
 import { useChain, ChainType, chainConfigs } from '@/lib/chainContext';
@@ -327,6 +327,9 @@ export default function Home() {
           setToPriceUsd(null);
           setInsufficientFunds(false);
           setUserBalance(null);
+          priceHistoryRef.current = { from: [], to: [] };
+          setFromPriceHistory([]);
+          setToPriceHistory([]);
           setFromToken(null);
           setToToken(null);
           
@@ -342,6 +345,9 @@ export default function Home() {
           setToPriceUsd(null);
           setInsufficientFunds(false);
           setUserBalance(null);
+          priceHistoryRef.current = { from: [], to: [] };
+          setFromPriceHistory([]);
+          setToPriceHistory([]);
           setFromToken(null);
           setToToken(null);
           
@@ -359,14 +365,24 @@ export default function Home() {
     fetchPrices();
   }, [fetchPrices, chain]);
 
-  // Listen for token selection from main search bar
+  // Listen for token selection from main search bar and load historical data
   useEffect(() => {
     if (selectedFromToken && selectionVersion > 0) {
-      setFromToken(selectedFromToken as ExtendedToken);
-      showToast(`Selected ${selectedFromToken.symbol} as FROM token`, { type: 'success', ttl: 2000 });
+      const token = selectedFromToken as ExtendedToken;
+      setFromToken(token);
+      showToast(`Selected ${token.symbol} as FROM token`, { type: 'success', ttl: 2000 });
       clearSelection();
+      
+      // Load historical price data for sparkline
+      const chainId = chain === 'ETH' ? 1 : 137;
+      getHistoricalPriceData(token, chainId).then(history => {
+        if (history.length > 0) {
+          priceHistoryRef.current.from = history;
+          setFromPriceHistory([...history]);
+        }
+      });
     }
-  }, [selectedFromToken, selectionVersion, clearSelection]);
+  }, [selectedFromToken, selectionVersion, clearSelection, chain]);
 
   // Price-based estimate
   useEffect(() => {

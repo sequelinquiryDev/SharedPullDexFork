@@ -772,3 +772,23 @@ export async function refreshMarketData(chainId?: number): Promise<void> {
   statsMapByAddressChain.set(cid, statsMapByAddress);
   console.log(`Refreshed market data for chain ${cid}, source: ${currentDataSource}`);
 }
+
+// Fetch historical 2-hour price data (60 points at 2-minute intervals)
+export async function getHistoricalPriceData(token: Token, chainId: number): Promise<number[]> {
+  try {
+    const cgNetwork = chainIdToCoingeckoNetwork[chainId] || 'polygon-pos';
+    const url = `/api/prices/coingecko/coins/${cgNetwork}/contract/${token.address}/market_chart?vs_currency=usd&days=2`;
+    const response = await fetchWithTimeout(url, {}, 5000);
+    
+    if (!response.ok) return [];
+    
+    const data = await response.json() as any;
+    const prices = data?.prices || [];
+    
+    // Get last 60 data points (2 hours at 2-minute intervals, but using available data)
+    return prices.slice(-60).map((p: any) => typeof p[1] === 'number' ? p[1] : 0).filter(p => p > 0);
+  } catch (e) {
+    console.warn('Failed to fetch historical price data:', e);
+    return [];
+  }
+}
