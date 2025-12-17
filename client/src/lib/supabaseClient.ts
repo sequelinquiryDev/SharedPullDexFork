@@ -1,8 +1,9 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { fetchServerConfig } from './config';
 
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Supabase client - initialized lazily from server config
+let supabaseClient: SupabaseClient | null = null;
+let initPromise: Promise<SupabaseClient | null> | null = null;
 
 // Only create client if both credentials are valid URLs/keys
 const isValidUrl = (url: string) => {
@@ -14,32 +15,65 @@ const isValidUrl = (url: string) => {
   }
 };
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('[Supabase] Credentials missing. Chat will not work.');
+// Initialize Supabase client from server config (credentials protected server-side)
+async function initializeSupabase(): Promise<SupabaseClient | null> {
+  if (supabaseClient) return supabaseClient;
+  if (initPromise) return initPromise;
+  
+  initPromise = fetchServerConfig().then(serverConfig => {
+    const supabaseUrl = serverConfig.supabaseUrl || '';
+    const supabaseAnonKey = serverConfig.supabaseAnonKey || '';
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.warn('[Supabase] Credentials missing. Chat will not work.');
+      return null;
+    }
+    
+    if (!isValidUrl(supabaseUrl)) {
+      console.warn('[Supabase] Invalid URL. Chat will not work.');
+      return null;
+    }
+    
+    try {
+      supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+        realtime: {
+          params: {
+            eventsPerSecond: 10,
+          },
+        },
+      });
+      return supabaseClient;
+    } catch (e) {
+      console.warn('[Supabase] Failed to initialize:', e);
+      return null;
+    }
+  }).catch(err => {
+    console.error('[Supabase] Config fetch error:', err);
+    return null;
+  });
+  
+  return initPromise;
 }
 
-export const supabase = (supabaseUrl && supabaseAnonKey && isValidUrl(supabaseUrl))
-  ? (() => {
-      try {
-        return createClient(supabaseUrl, supabaseAnonKey, {
-          realtime: {
-            params: {
-              eventsPerSecond: 10,
-            },
-          },
-        });
-      } catch (e) {
-        console.warn('[Supabase] Failed to initialize:', e);
-        return null;
-      }
-    })()
-  : null;
+// Synchronous access to supabase client (may be null if not initialized)
+export function getSupabase(): SupabaseClient | null {
+  return supabaseClient;
+}
+
+// Legacy export for backward compatibility - will be null until initialized
+export const supabase: SupabaseClient | null = null;
+
+// Initialize and get supabase client
+export async function getSupabaseAsync(): Promise<SupabaseClient | null> {
+  return initializeSupabase();
+}
 
 export async function fetchMessages() {
-  if (!supabase) return [];
+  const client = await getSupabaseAsync();
+  if (!client) return [];
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await client
       .from('chat_messages')
       .select('id, user, text, created_at')
       .order('created_at', { ascending: true })
@@ -64,10 +98,11 @@ export async function fetchMessages() {
 }
 
 export async function sendMessage(username: string, message: string) {
-  if (!supabase) return false;
+  const client = await getSupabaseAsync();
+  if (!client) return false;
 
   try {
-    const { error } = await supabase
+    const { error } = await client
       .from('chat_messages')
       .insert({ user: username, text: message });
 
@@ -83,10 +118,11 @@ export async function sendMessage(username: string, message: string) {
   }
 }
 
-export function subscribeToMessages(callback: (message: any) => void) {
-  if (!supabase) return null;
+export async function subscribeToMessages(callback: (message: any) => void): Promise<(() => void) | null> {
+  const client = await getSupabaseAsync();
+  if (!client) return null;
 
-  const channel = supabase
+  const channel = client
     .channel('public:chat_messages')
     .on(
       'postgres_changes',

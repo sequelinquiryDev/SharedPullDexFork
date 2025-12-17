@@ -1,9 +1,33 @@
 import { createConfig, http } from 'wagmi';
 import { polygon, mainnet } from 'wagmi/chains';
 import { injected, walletConnect } from 'wagmi/connectors';
-import { config, ethereumConfig } from './config';
+import { config, fetchServerConfig } from './config';
 
-const projectId = config.walletConnectProjectId;
+// SECURITY: RPC URLs are NEVER stored client-side
+// All blockchain calls go through server proxy endpoints
+
+// Dynamic config for WalletConnect only
+let walletConnectProjectId = '';
+
+// Initialize wagmi config with server-provided values
+export async function initializeWagmiConfig(): Promise<void> {
+  try {
+    const serverConfig = await fetchServerConfig();
+    if (serverConfig.walletConnectProjectId) {
+      walletConnectProjectId = serverConfig.walletConnectProjectId;
+    }
+    // RPC URLs are NEVER fetched - we use proxy endpoints
+  } catch (err) {
+    console.error('Failed to initialize wagmi config:', err);
+  }
+}
+
+// Get project ID
+function getProjectId(): string {
+  return walletConnectProjectId || config.walletConnectProjectId || '';
+}
+
+const projectId = getProjectId();
 
 export const wagmiConfig = createConfig({
   chains: [polygon, mainnet],
@@ -21,8 +45,10 @@ export const wagmiConfig = createConfig({
     }),
   ],
   transports: {
-    [polygon.id]: http(config.rpcUrls[0]),
-    [mainnet.id]: http(ethereumConfig.rpcUrls[0]),
+    // SECURITY: Use server-proxied RPC endpoints - custom RPC URLs with API keys are protected server-side
+    // The server uses VITE_POL_RPC_URL and VITE_ETH_RPC_URL as primary, with public fallbacks
+    [polygon.id]: http('/api/proxy/rpc/pol'),
+    [mainnet.id]: http('/api/proxy/rpc/eth'),
   },
 });
 

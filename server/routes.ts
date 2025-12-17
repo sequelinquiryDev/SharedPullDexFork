@@ -99,30 +99,42 @@ function getLifiApiKey(): string {
 }
 
 // Get new multi-chain API key (PROTECTED SERVER-SIDE - never expose to frontend)
+// This is used for Etherscan/Polygonscan API calls
 function getEthPolApiKey(): string {
   const key = process.env.VITE_ETH_POL_API || '';
   if (!key) console.warn('[Security] VITE_ETH_POL_API not configured');
   return key;
 }
 
-// Get RPC URLs (PROTECTED SERVER-SIDE - never expose to frontend)
+// Get WalletConnect Project ID (safe to expose to client for SDK initialization)
+function getWalletConnectProjectId(): string {
+  return process.env.VITE_WALLETCONNECT_PROJECT_ID || '';
+}
+
+// Get Supabase credentials (anon key is designed to be public, URL is safe)
+function getSupabaseUrl(): string {
+  return process.env.VITE_SUPABASE_URL || '';
+}
+
+function getSupabaseAnonKey(): string {
+  return process.env.VITE_SUPABASE_ANON_KEY || '';
+}
+
+// Get RPC URLs (PROTECTED SERVER-SIDE - user's custom RPCs as PRIMARY)
 function getEthRpcUrl(): string {
-  const url = process.env.VITE_ETH_RPC_URL || 'https://eth.llamarpc.com';
-  return url;
+  // User's custom RPC is primary, fallback to public
+  const customRpc = process.env.VITE_ETH_RPC_URL || '';
+  return customRpc || 'https://eth.llamarpc.com';
 }
 
 function getPolRpcUrl(): string {
-  const url = process.env.VITE_POL_RPC_URL || 'https://polygon-rpc.com';
-  return url;
+  // User's custom RPC is primary, fallback to public
+  const customRpc = process.env.VITE_POL_RPC_URL || '';
+  return customRpc || 'https://polygon-rpc.com';
 }
 
-// SECURITY: Endpoint to get RPC URLs safely (never expose API keys)
-function getPublicRpcConfig() {
-  return {
-    ethRpc: getEthRpcUrl(),
-    polRpc: getPolRpcUrl(),
-  };
-}
+// REMOVED: getPublicRpcConfig() - RPC URLs are never exposed to frontend
+// All RPC calls must go through /api/proxy/rpc/* endpoints
 
 // Alternating source for token prices (2-minute sequence)
 let lastPriceSource: 'cmc' | 'coingecko' = 'cmc';
@@ -194,17 +206,19 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // GET /api/config - Returns public configuration (no secrets)
+  // GET /api/config - Returns public configuration (secrets protected server-side)
+  // SECURITY: No RPC URLs are exposed - all RPC calls must go through /api/proxy/rpc/*
   app.get("/api/config", (req, res) => {
     res.json({
       chainId: Number(process.env.VITE_CHAIN_ID || 137),
       chainIdHex: process.env.VITE_CHAIN_ID_HEX || '0x89',
       chainName: process.env.VITE_CHAIN_NAME || 'Polygon',
       coingeckoChain: process.env.VITE_COINGECKO_CHAIN || 'polygon-pos',
-      rpcUrls: [
-        process.env.VITE_RPC_URL_1 || 'https://polygon-rpc.com',
-        process.env.VITE_RPC_URL_2 || 'https://rpc-mainnet.maticvigil.com',
-      ],
+      // SECURITY: Only provide proxy endpoints, never raw RPC URLs
+      rpcProxyEndpoints: {
+        eth: '/api/proxy/rpc/eth',
+        pol: '/api/proxy/rpc/pol',
+      },
       oneInchBase: process.env.VITE_ONEINCH_BASE || 'https://api.1inch.io/v5.0/137',
       zeroXBase: process.env.VITE_ZEROX_BASE || 'https://polygon.api.0x.org',
       usdcAddr: process.env.VITE_USDC_ADDR || '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
@@ -223,7 +237,16 @@ export async function registerRoutes(
       hasZeroXKey: !!getZeroXApiKey(),
       hasLifiKey: !!getLifiApiKey(),
       hasEthPolApi: !!getEthPolApiKey(),
-      rpcConfig: getPublicRpcConfig(),
+      hasCustomEthRpc: !!process.env.VITE_ETH_RPC_URL,
+      hasCustomPolRpc: !!process.env.VITE_POL_RPC_URL,
+      // INTENTIONALLY PUBLIC CREDENTIALS (by design of these services):
+      // - WalletConnect Project ID: Required client-side for wallet connection SDK
+      // - Supabase URL & Anon Key: Supabase's design requires these client-side.
+      //   Security is enforced via Row Level Security (RLS), not the anon key.
+      //   See: https://supabase.com/docs/guides/api#api-keys
+      walletConnectProjectId: getWalletConnectProjectId(),
+      supabaseUrl: getSupabaseUrl(),
+      supabaseAnonKey: getSupabaseAnonKey(),
     });
   });
 
@@ -585,23 +608,8 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/rpc/eth - Protected server-side RPC endpoint for Ethereum
-  app.get("/api/rpc/eth", rateLimitMiddleware, (req, res) => {
-    const rpcUrl = getEthRpcUrl();
-    if (!rpcUrl) {
-      return res.status(503).json({ error: 'Ethereum RPC not configured' });
-    }
-    res.json({ rpcUrl });
-  });
-
-  // GET /api/rpc/pol - Protected server-side RPC endpoint for Polygon
-  app.get("/api/rpc/pol", rateLimitMiddleware, (req, res) => {
-    const rpcUrl = getPolRpcUrl();
-    if (!rpcUrl) {
-      return res.status(503).json({ error: 'Polygon RPC not configured' });
-    }
-    res.json({ rpcUrl });
-  });
+  // REMOVED: /api/rpc/eth and /api/rpc/pol GET endpoints that exposed raw URLs
+  // Use POST /api/proxy/rpc/* endpoints instead for secure proxied RPC calls
 
   // Proxy for LIFI API - POST requests (for advanced routes)
   app.post("/api/proxy/lifi/*", rateLimitMiddleware, async (req, res) => {
@@ -641,6 +649,216 @@ export async function registerRoutes(
     } catch (error) {
       console.error('LIFI proxy POST error:', error);
       return res.status(500).json({ error: 'Failed to fetch LIFI data' });
+    }
+  });
+
+  // ============================================================
+  // BLOCKCHAIN EXPLORER PROXIES (Etherscan/Polygonscan)
+  // Uses VITE_ETH_POL_API for both Ethereum and Polygon explorers
+  // ============================================================
+
+  // Proxy for Etherscan API - Ethereum blockchain explorer
+  app.get("/api/proxy/etherscan/*", rateLimitMiddleware, async (req, res) => {
+    try {
+      const apiKey = getEthPolApiKey();
+      if (!apiKey) {
+        return res.status(503).json({ error: 'Etherscan API key not configured' });
+      }
+
+      const path = req.params[0] || '';
+      const queryParams = new URLSearchParams(req.query as Record<string, string>);
+      queryParams.set('apikey', apiKey);
+      
+      const cacheKey = `etherscan:${path}:${queryParams.toString()}`;
+      const cached = getCached(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      const url = `https://api.etherscan.io/api?${queryParams.toString()}`;
+      
+      const response = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Etherscan API error:', response.status, errorText);
+        return res.status(response.status).json({ 
+          error: 'Etherscan API request failed',
+          status: response.status
+        });
+      }
+
+      const data = await response.json();
+      setCache(cacheKey, data, 30000); // Cache for 30 seconds
+      return res.json(data);
+    } catch (error) {
+      console.error('Etherscan proxy error:', error);
+      return res.status(500).json({ error: 'Failed to fetch Etherscan data' });
+    }
+  });
+
+  // Proxy for Polygonscan API - Polygon blockchain explorer
+  app.get("/api/proxy/polygonscan/*", rateLimitMiddleware, async (req, res) => {
+    try {
+      const apiKey = getEthPolApiKey();
+      if (!apiKey) {
+        return res.status(503).json({ error: 'Polygonscan API key not configured' });
+      }
+
+      const path = req.params[0] || '';
+      const queryParams = new URLSearchParams(req.query as Record<string, string>);
+      queryParams.set('apikey', apiKey);
+      
+      const cacheKey = `polygonscan:${path}:${queryParams.toString()}`;
+      const cached = getCached(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      const url = `https://api.polygonscan.com/api?${queryParams.toString()}`;
+      
+      const response = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Polygonscan API error:', response.status, errorText);
+        return res.status(response.status).json({ 
+          error: 'Polygonscan API request failed',
+          status: response.status
+        });
+      }
+
+      const data = await response.json();
+      setCache(cacheKey, data, 30000); // Cache for 30 seconds
+      return res.json(data);
+    } catch (error) {
+      console.error('Polygonscan proxy error:', error);
+      return res.status(500).json({ error: 'Failed to fetch Polygonscan data' });
+    }
+  });
+
+  // Generic blockchain explorer proxy (auto-detects chain)
+  app.get("/api/proxy/explorer/:chain/*", rateLimitMiddleware, async (req, res) => {
+    try {
+      const apiKey = getEthPolApiKey();
+      if (!apiKey) {
+        return res.status(503).json({ error: 'Explorer API key not configured' });
+      }
+
+      const chain = req.params.chain.toLowerCase();
+      const path = req.params[0] || '';
+      const queryParams = new URLSearchParams(req.query as Record<string, string>);
+      queryParams.set('apikey', apiKey);
+      
+      let baseUrl: string;
+      switch (chain) {
+        case 'eth':
+        case 'ethereum':
+        case '1':
+          baseUrl = 'https://api.etherscan.io';
+          break;
+        case 'pol':
+        case 'polygon':
+        case 'matic':
+        case '137':
+          baseUrl = 'https://api.polygonscan.com';
+          break;
+        default:
+          return res.status(400).json({ error: `Unsupported chain: ${chain}` });
+      }
+      
+      const cacheKey = `explorer:${chain}:${path}:${queryParams.toString()}`;
+      const cached = getCached(cacheKey);
+      if (cached) {
+        return res.json(cached);
+      }
+
+      const url = `${baseUrl}/api?${queryParams.toString()}`;
+      
+      const response = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`${chain} explorer API error:`, response.status, errorText);
+        return res.status(response.status).json({ 
+          error: `${chain} explorer API request failed`,
+          status: response.status
+        });
+      }
+
+      const data = await response.json();
+      setCache(cacheKey, data, 30000); // Cache for 30 seconds
+      return res.json(data);
+    } catch (error) {
+      console.error('Explorer proxy error:', error);
+      return res.status(500).json({ error: 'Failed to fetch explorer data' });
+    }
+  });
+
+  // RPC proxy for Ethereum (protects RPC URL with potential API key)
+  app.post("/api/proxy/rpc/eth", rateLimitMiddleware, async (req, res) => {
+    try {
+      const rpcUrl = getEthRpcUrl();
+      if (!rpcUrl) {
+        return res.status(503).json({ error: 'Ethereum RPC not configured' });
+      }
+
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('ETH RPC error:', response.status, errorText);
+        return res.status(response.status).json({ error: 'ETH RPC request failed' });
+      }
+
+      const data = await response.json();
+      return res.json(data);
+    } catch (error) {
+      console.error('ETH RPC proxy error:', error);
+      return res.status(500).json({ error: 'Failed to proxy ETH RPC request' });
+    }
+  });
+
+  // RPC proxy for Polygon (protects RPC URL with potential API key)
+  app.post("/api/proxy/rpc/pol", rateLimitMiddleware, async (req, res) => {
+    try {
+      const rpcUrl = getPolRpcUrl();
+      if (!rpcUrl) {
+        return res.status(503).json({ error: 'Polygon RPC not configured' });
+      }
+
+      const response = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(req.body),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('POL RPC error:', response.status, errorText);
+        return res.status(response.status).json({ error: 'POL RPC request failed' });
+      }
+
+      const data = await response.json();
+      return res.json(data);
+    } catch (error) {
+      console.error('POL RPC proxy error:', error);
+      return res.status(500).json({ error: 'Failed to proxy POL RPC request' });
     }
   });
 
