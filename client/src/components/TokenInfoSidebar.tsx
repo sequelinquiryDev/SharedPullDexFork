@@ -270,7 +270,11 @@ export function TokenInfoSidebar({
                     {currentSource === 'cmc' ? (
                       <SiCoinmarketcap size={12} style={{ color: '#17f0cb' }} />
                     ) : (
-                      <img src="https://seeklogo.com/images/C/coingecko-logo-5B45B82187-seeklogo.com.png" alt="CoinGecko" style={{ width: '12px', height: '12px' }} />
+                      <svg viewBox="0 0 500 500" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="250" cy="250" r="245" fill="#8DC63F"/>
+                        <path d="M250 120c71.6 0 130 58.4 130 130s-58.4 130-130 130-130-58.4-130-130 58.4-130 130-130z" fill="#FFFFFF"/>
+                        <path d="M250 160c50.7 0 92 41.3 92 92s-41.3 92-92 92-92-41.3-92-92 41.3-92 92-92z" fill="#8DC63F"/>
+                      </svg>
                     )}
                   </div>
                   <span>{timeInCycle}s</span>
@@ -304,7 +308,11 @@ export function TokenInfoSidebar({
                     {currentSource === 'cmc' ? (
                       <SiCoinmarketcap size={12} style={{ color: '#17f0cb' }} />
                     ) : (
-                      <img src="https://seeklogo.com/images/C/coingecko-logo-5B45B82187-seeklogo.com.png" alt="CoinGecko" style={{ width: '12px', height: '12px' }} />
+                      <svg viewBox="0 0 500 500" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="250" cy="250" r="245" fill="#8DC63F"/>
+                        <path d="M250 120c71.6 0 130 58.4 130 130s-58.4 130-130 130-130-58.4-130-130 58.4-130 130-130z" fill="#FFFFFF"/>
+                        <path d="M250 160c50.7 0 92 41.3 92 92s-41.3 92-92 92-92-41.3-92-92 41.3-92 92-92z" fill="#8DC63F"/>
+                      </svg>
                     )}
                   </div>
                   <span>{timeInCycle}s</span>
