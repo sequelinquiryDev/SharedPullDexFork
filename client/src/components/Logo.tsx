@@ -2,10 +2,10 @@ export function Logo() {
   return (
     <div className="logo-container">
       <div className="logo-3d-wrapper">
-        {/* Shimmer effects */}
-        <div className="shimmer shimmer-1"></div>
-        <div className="shimmer shimmer-2"></div>
-        <div className="shimmer shimmer-3"></div>
+        {/* Dynamic Aura effects - replaces gold balls */}
+        <div className="aura aura-primary"></div>
+        <div className="aura aura-secondary"></div>
+        <div className="aura aura-accent"></div>
         
         {/* 3D Logo layers */}
         <div className="logo-3d-layer layer-1">

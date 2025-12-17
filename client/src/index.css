@@ -16,6 +16,14 @@
   --accent-1-brg: #ffb545;
   --accent-2-brg: #ff9f13;
 
+  /* Logo glow colors - Dynamic per chain */
+  --logo-glow-primary: rgba(180, 69, 255, 0.4);
+  --logo-glow-secondary: rgba(180, 69, 255, 0.5);
+  --logo-glow-accent: rgba(180, 69, 255, 0.6);
+  --logo-aura-1: rgba(180, 69, 255, 0.8);
+  --logo-aura-2: rgba(112, 19, 255, 0.7);
+  --logo-aura-3: rgba(180, 69, 255, 0.6);
+
   /* Glass effects */
   --glass: rgba(255,255,255,0.05);
   --glass-2: rgba(255,255,255,0.03);
@@ -115,6 +123,12 @@ body {
 
 body.eth-chain {
   background: radial-gradient(circle at center, #000c14, #001a2b 80%);
+  --logo-glow-primary: rgba(69, 137, 255, 0.4);
+  --logo-glow-secondary: rgba(69, 137, 255, 0.5);
+  --logo-glow-accent: rgba(69, 137, 255, 0.6);
+  --logo-aura-1: rgba(69, 137, 255, 0.8);
+  --logo-aura-2: rgba(19, 112, 255, 0.7);
+  --logo-aura-3: rgba(69, 137, 255, 0.6);
 }
 
 body.eth-chain :root {
@@ -124,6 +138,12 @@ body.eth-chain :root {
 
 body.brg-chain {
   background: radial-gradient(circle at center, #14100c, #2b1a00 80%);
+  --logo-glow-primary: rgba(255, 181, 69, 0.4);
+  --logo-glow-secondary: rgba(255, 181, 69, 0.5);
+  --logo-glow-accent: rgba(255, 181, 69, 0.6);
+  --logo-aura-1: rgba(255, 181, 69, 0.8);
+  --logo-aura-2: rgba(255, 159, 19, 0.7);
+  --logo-aura-3: rgba(255, 181, 69, 0.6);
 }
 
 body.brg-chain :root {
@@ -215,7 +235,7 @@ body::before {
   align-items: center;
   justify-content: center;
   transform-style: preserve-3d;
-  filter: drop-shadow(0 0 8px rgba(239, 118, 21, 0.3));
+  filter: drop-shadow(0 0 12px var(--logo-glow-primary));
 }
 
 .layer-1 {
@@ -226,84 +246,81 @@ body::before {
 .layer-2 {
   transform: translateZ(8px);
   opacity: 0.8;
-  filter: drop-shadow(0 0 12px rgba(239, 118, 21, 0.4));
+  filter: drop-shadow(0 0 16px var(--logo-glow-secondary));
 }
 
 .layer-3 {
   transform: translateZ(16px);
   opacity: 0.6;
-  filter: drop-shadow(0 0 16px rgba(239, 118, 21, 0.5));
+  filter: drop-shadow(0 0 22px var(--logo-glow-accent));
 }
 
-/* Vibration animation */
+/* Enhanced vibration animation - more dynamic and unique */
 @keyframes logoVibrate {
-  0%, 100% { transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg); }
-  10% { transform: translate3d(-1px, -1px, 0) rotateX(0.5deg) rotateY(-0.5deg); }
-  20% { transform: translate3d(1px, 1px, 0) rotateX(-0.5deg) rotateY(0.5deg); }
-  30% { transform: translate3d(-1px, 1px, 0) rotateX(0.3deg) rotateY(-0.3deg); }
-  40% { transform: translate3d(1px, -1px, 0) rotateX(-0.3deg) rotateY(0.3deg); }
-  50% { transform: translate3d(0, -1px, 0) rotateX(0.2deg) rotateY(0deg); }
-  60% { transform: translate3d(-1px, 0, 0) rotateX(0deg) rotateY(-0.2deg); }
-  70% { transform: translate3d(1px, 0, 0) rotateX(-0.2deg) rotateY(0.2deg); }
-  80% { transform: translate3d(0, 1px, 0) rotateX(0.1deg) rotateY(0deg); }
-  90% { transform: translate3d(-0.5px, -0.5px, 0) rotateX(-0.1deg) rotateY(-0.1deg); }
+  0%, 100% { transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
+  8% { transform: translate3d(-1.5px, -1.5px, 0) rotateX(0.8deg) rotateY(-0.8deg) rotateZ(0.3deg); }
+  16% { transform: translate3d(1.2px, 0.8px, 0) rotateX(-0.6deg) rotateY(0.7deg) rotateZ(-0.4deg); }
+  24% { transform: translate3d(-0.8px, 1.4px, 0) rotateX(0.5deg) rotateY(-0.5deg) rotateZ(0.2deg); }
+  32% { transform: translate3d(1.6px, -0.9px, 0) rotateX(-0.7deg) rotateY(0.6deg) rotateZ(-0.5deg); }
+  40% { transform: translate3d(-1.1px, -0.6px, 0) rotateX(0.4deg) rotateY(-0.3deg) rotateZ(0.35deg); }
+  48% { transform: translate3d(0.9px, 1.1px, 0) rotateX(-0.5deg) rotateY(0.4deg) rotateZ(-0.25deg); }
+  56% { transform: translate3d(-1.3px, 0.7px, 0) rotateX(0.6deg) rotateY(-0.6deg) rotateZ(0.4deg); }
+  64% { transform: translate3d(1.0px, -1.2px, 0) rotateX(-0.4deg) rotateY(0.5deg) rotateZ(-0.3deg); }
+  72% { transform: translate3d(-0.7px, 0.9px, 0) rotateX(0.3deg) rotateY(-0.4deg) rotateZ(0.25deg); }
+  80% { transform: translate3d(1.4px, 0.5px, 0) rotateX(-0.55deg) rotateY(0.55deg) rotateZ(-0.45deg); }
+  88% { transform: translate3d(-1.0px, -0.8px, 0) rotateX(0.45deg) rotateY(-0.45deg) rotateZ(0.35deg); }
+  96% { transform: translate3d(0.6px, 1.0px, 0) rotateX(-0.35deg) rotateY(0.35deg) rotateZ(-0.2deg); }
 }
 
-/* Gold shimmer particles */
-.shimmer {
+/* Dynamic Aura effects - replaces gold balls with theme-aware glows */
+.aura {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle, #FFD700, #FFA500, transparent);
   pointer-events: none;
-  animation: shimmerFade 2s ease-in-out infinite;
+  filter: blur(8px);
+  animation: auraFloat 4s ease-in-out infinite;
 }
 
-.shimmer-1 {
-  width: 20px;
-  height: 20px;
-  top: -10px;
-  left: 20px;
-  animation: shimmerFade 2s ease-in-out infinite 0s, shimmerMove1 3s ease-in-out infinite;
+.aura-primary {
+  width: 28px;
+  height: 28px;
+  top: -14px;
+  left: 28px;
+  background: radial-gradient(circle, var(--logo-aura-1), transparent);
+  animation: auraFloat 4s ease-in-out infinite 0s, auraPulse 3s ease-in-out infinite;
+  opacity: 0.7;
 }
 
-.shimmer-2 {
-  width: 16px;
-  height: 16px;
-  top: 30px;
-  right: -8px;
-  animation: shimmerFade 2s ease-in-out infinite 0.6s, shimmerMove2 3s ease-in-out infinite;
+.aura-secondary {
+  width: 24px;
+  height: 24px;
+  top: 38px;
+  right: -12px;
+  background: radial-gradient(circle, var(--logo-aura-2), transparent);
+  animation: auraFloat 4.5s ease-in-out infinite 0.5s, auraPulse 3.2s ease-in-out infinite 0.3s;
+  opacity: 0.65;
 }
 
-.shimmer-3 {
-  width: 18px;
-  height: 18px;
-  bottom: 10px;
-  left: -9px;
-  animation: shimmerFade 2s ease-in-out infinite 1.2s, shimmerMove3 3s ease-in-out infinite;
+.aura-accent {
+  width: 26px;
+  height: 26px;
+  bottom: 12px;
+  left: -13px;
+  background: radial-gradient(circle, var(--logo-aura-3), transparent);
+  animation: auraFloat 4.2s ease-in-out infinite 1s, auraPulse 3.5s ease-in-out infinite 0.7s;
+  opacity: 0.6;
 }
 
-@keyframes shimmerFade {
-  0% { opacity: 0; transform: scale(0.5); }
-  50% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(0.5); }
-}
-
-@keyframes shimmerMove1 {
+@keyframes auraFloat {
   0% { transform: translate(0, 0); }
-  50% { transform: translate(-15px, -15px); }
+  33% { transform: translate(12px, -8px); }
+  66% { transform: translate(-8px, 10px); }
   100% { transform: translate(0, 0); }
 }
 
-@keyframes shimmerMove2 {
-  0% { transform: translate(0, 0); }
-  50% { transform: translate(15px, -15px); }
-  100% { transform: translate(0, 0); }
-}
-
-@keyframes shimmerMove3 {
-  0% { transform: translate(0, 0); }
-  50% { transform: translate(-15px, 15px); }
-  100% { transform: translate(0, 0); }
+@keyframes auraPulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.3); opacity: 0.3; }
 }
 
 /* ===== CARD ENTRANCE ANIMATION ===== */
