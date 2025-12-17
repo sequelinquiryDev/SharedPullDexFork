@@ -61,6 +61,8 @@ export default function Home() {
 
   const [fromPriceUsd, setFromPriceUsd] = useState<number | null>(null);
   const [toPriceUsd, setToPriceUsd] = useState<number | null>(null);
+  
+  const priceRequestIdRef = useRef<number>(0);
 
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [isSwapping, setIsSwapping] = useState(false);
@@ -178,6 +180,9 @@ export default function Home() {
   }, [tokensLoaded, location]);
 
   const fetchPrices = useCallback(async () => {
+    // Increment request ID to invalidate previous requests
+    const currentRequestId = ++priceRequestIdRef.current;
+    
     // Use token-specific chainId in BRG mode
     const fromChainId = fromToken ? getTokenChainId(fromToken) : (chain === 'ETH' ? 1 : 137);
     const toChainId = toToken ? getTokenChainId(toToken) : (chain === 'ETH' ? 1 : 137);
@@ -185,39 +190,55 @@ export default function Home() {
     if (fromToken) {
       try {
         const price = await getTokenPriceUSD(fromToken.address, fromToken.decimals, fromChainId);
-        setFromPriceUsd(price);
-        // Track price history for sparklines (following 2-minute server sequence)
-        if (price !== null) {
-          priceHistoryRef.current.from = [...priceHistoryRef.current.from.slice(-59), price]; // Keep last 60 points (2 hours at 2-min intervals)
-          setFromPriceHistory([...priceHistoryRef.current.from]);
+        // Only update if this is still the latest request
+        if (currentRequestId === priceRequestIdRef.current) {
+          setFromPriceUsd(price);
+          // Track price history for sparklines (following 2-minute server sequence)
+          if (price !== null) {
+            priceHistoryRef.current.from = [...priceHistoryRef.current.from.slice(-59), price]; // Keep last 60 points (2 hours at 2-min intervals)
+            setFromPriceHistory([...priceHistoryRef.current.from]);
+          }
         }
       } catch (e) {
         console.error("Failed to fetch price for fromToken:", fromToken.address, e);
-        setFromPriceUsd(null);
+        // Only update if this is still the latest request
+        if (currentRequestId === priceRequestIdRef.current) {
+          setFromPriceUsd(null);
+        }
       }
     } else {
-      setFromPriceUsd(null);
-      priceHistoryRef.current.from = [];
-      setFromPriceHistory([]);
+      if (currentRequestId === priceRequestIdRef.current) {
+        setFromPriceUsd(null);
+        priceHistoryRef.current.from = [];
+        setFromPriceHistory([]);
+      }
     }
 
     if (toToken) {
       try {
         const price = await getTokenPriceUSD(toToken.address, toToken.decimals, toChainId);
-        setToPriceUsd(price);
-        // Track price history for sparklines (following 2-minute server sequence)
-        if (price !== null) {
-          priceHistoryRef.current.to = [...priceHistoryRef.current.to.slice(-59), price]; // Keep last 60 points (2 hours at 2-min intervals)
-          setToPriceHistory([...priceHistoryRef.current.to]);
+        // Only update if this is still the latest request
+        if (currentRequestId === priceRequestIdRef.current) {
+          setToPriceUsd(price);
+          // Track price history for sparklines (following 2-minute server sequence)
+          if (price !== null) {
+            priceHistoryRef.current.to = [...priceHistoryRef.current.to.slice(-59), price]; // Keep last 60 points (2 hours at 2-min intervals)
+            setToPriceHistory([...priceHistoryRef.current.to]);
+          }
         }
       } catch (e) {
         console.error("Failed to fetch price for toToken:", toToken.address, e);
-        setToPriceUsd(null);
+        // Only update if this is still the latest request
+        if (currentRequestId === priceRequestIdRef.current) {
+          setToPriceUsd(null);
+        }
       }
     } else {
-      setToPriceUsd(null);
-      priceHistoryRef.current.to = [];
-      setToPriceHistory([]);
+      if (currentRequestId === priceRequestIdRef.current) {
+        setToPriceUsd(null);
+        priceHistoryRef.current.to = [];
+        setToPriceHistory([]);
+      }
     }
   }, [fromToken, toToken, chain]);
 
