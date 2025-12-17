@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAccount, useEnsName } from 'wagmi';
-import { fetchMessages, sendMessage, subscribeToMessages } from '@/lib/supabaseClient';
+import { fetchMessages, sendMessage, subscribeToMessages, getChatStatus, ChatStatus } from '@/lib/supabaseClient';
 
 interface Message {
   id: string;
@@ -28,9 +28,20 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
   const [username, setUsername] = useState('');
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [rateLimitMessage, setRateLimitMessage] = useState<string | null>(null);
+  const [chatStatus, setChatStatus] = useState<ChatStatus | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLDivElement>(null);
+
+  // Fetch chat status on mount and when chat opens
+  useEffect(() => {
+    if (isOpen) {
+      getChatStatus().then(status => {
+        if (status) setChatStatus(status);
+      });
+    }
+  }, [isOpen]);
 
   // Set username from ENS name, stored value, or wallet address
   useEffect(() => {
@@ -192,10 +203,21 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
     const messageText = inputValue.trim();
     setInputValue('');
     setIsSending(true);
+    setRateLimitMessage(null);
 
-    const success = await sendMessage(username, messageText);
-    if (!success) {
+    const result = await sendMessage(username, messageText);
+    
+    if (!result.success) {
       setInputValue(messageText);
+      if (result.error === 'rate_limit') {
+        setRateLimitMessage(result.message || 'Rate limit reached');
+        // Auto-clear message after 10 seconds
+        setTimeout(() => setRateLimitMessage(null), 10000);
+      }
+    } else {
+      // Refresh chat status after successful send
+      const status = await getChatStatus();
+      if (status) setChatStatus(status);
     }
 
     setIsSending(false);
@@ -249,6 +271,46 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Rate limit notification */}
+        {rateLimitMessage && (
+          <div 
+            style={{
+              padding: '10px 12px',
+              marginBottom: '8px',
+              background: 'linear-gradient(135deg, rgba(255,180,70,0.15), rgba(255,140,50,0.1))',
+              border: '1px solid rgba(255,180,70,0.3)',
+              borderRadius: '8px',
+              fontSize: '12px',
+              color: '#ffb446',
+              textAlign: 'center',
+              animation: 'fadeIn 0.3s ease'
+            }}
+            data-testid="notification-rate-limit"
+          >
+            {rateLimitMessage}
+          </div>
+        )}
+
+        {/* Remaining messages indicator */}
+        {chatStatus && (
+          <div 
+            style={{
+              padding: '6px 10px',
+              marginBottom: '8px',
+              fontSize: '11px',
+              color: chatStatus.remainingMessages > 0 ? 'rgba(92,234,196,0.8)' : 'rgba(255,180,70,0.8)',
+              textAlign: 'center',
+              opacity: 0.8
+            }}
+            data-testid="text-remaining-messages"
+          >
+            {chatStatus.remainingMessages > 0 
+              ? `${chatStatus.remainingMessages}/${chatStatus.maxMessagesPerDay} messages left today`
+              : `Daily limit reached - Resets at ${chatStatus.resetTime}`
+            }
+          </div>
+        )}
+
         <div className="chat-input">
           <input
             type="text"
@@ -256,9 +318,15 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}
+            disabled={chatStatus?.remainingMessages === 0}
             data-testid="input-chat-message"
           />
-          <button onClick={handleSend} disabled={isSending} data-testid="button-send-chat" className="chat-send-arrow">
+          <button 
+            onClick={handleSend} 
+            disabled={isSending || chatStatus?.remainingMessages === 0} 
+            data-testid="button-send-chat" 
+            className="chat-send-arrow"
+          >
             {isSending ? (
               <span className="btn-spinner" style={{ width: '14px', height: '14px' }} />
             ) : (

@@ -97,24 +97,66 @@ export async function fetchMessages() {
   }
 }
 
-export async function sendMessage(username: string, message: string) {
-  const client = await getSupabaseAsync();
-  if (!client) return false;
+interface SendMessageResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  reason?: 'cooldown' | 'daily_limit';
+  cooldownSeconds?: number;
+  remainingMessages?: number;
+}
 
+export async function sendMessage(username: string, message: string): Promise<SendMessageResult> {
   try {
-    const { error } = await client
-      .from('chat_messages')
-      .insert({ user: username, text: message });
+    const response = await fetch('/api/chat/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, message })
+    });
 
-    if (error) {
-      console.error('Send message error:', error);
-      return false;
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data.message || 'Failed to send message',
+        error: data.error,
+        reason: data.reason,
+        cooldownSeconds: data.cooldownSeconds,
+        remainingMessages: data.remainingMessages
+      };
     }
 
-    return true;
+    return {
+      success: true,
+      message: data.message,
+      remainingMessages: data.remainingMessages
+    };
   } catch (e) {
     console.error('sendMessage exception:', e);
-    return false;
+    return { success: false, error: 'Network error' };
+  }
+}
+
+export interface ChatStatus {
+  canSend: boolean;
+  remainingMessages: number;
+  maxMessagesPerDay: number;
+  cooldownSeconds: number;
+  cooldownMinutes: number;
+  hoursUntilReset: number;
+  minutesUntilReset: number;
+  resetTime: string;
+}
+
+export async function getChatStatus(): Promise<ChatStatus | null> {
+  try {
+    const response = await fetch('/api/chat/status');
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (e) {
+    console.error('getChatStatus exception:', e);
+    return null;
   }
 }
 
