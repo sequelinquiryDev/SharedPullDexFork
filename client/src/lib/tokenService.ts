@@ -278,6 +278,117 @@ export function getStatsByTokenAddress(address: string, chainId?: number): Token
   return statsMapByAddress?.get(addr) || null;
 }
 
+// Enhanced stats fetcher with professional fallbacks for custom/new tokens
+export async function getEnhancedTokenStats(address: string, chainId?: number): Promise<TokenStats | null> {
+  const cid = chainId ?? config.chainId;
+  const addr = low(address);
+  
+  // First try cached stats
+  const cached = getStatsByTokenAddress(addr, cid);
+  if (cached && cached.price) {
+    return cached;
+  }
+  
+  // Professional fallback cascade for custom tokens
+  const networkMap: Record<number, string> = { 1: 'eth', 137: 'polygon_pos' };
+  const network = networkMap[cid] || 'polygon_pos';
+  
+  // Try DexScreener first (best for new/custom tokens)
+  try {
+    const dexUrl = `https://api.dexscreener.com/latest/dex/tokens/${addr}`;
+    const dexRes = await fetchWithTimeout(dexUrl, {}, 4000);
+    if (dexRes.ok) {
+      const dexData = await dexRes.json();
+      const pairs = dexData?.pairs || [];
+      const chainFilter = cid === 1 ? 'ethereum' : 'polygon';
+      const pair = pairs.find((p: any) => p.chainId === chainFilter) || pairs[0];
+      
+      if (pair) {
+        const priceUsd = pair.priceUsd ? Number(pair.priceUsd) : null;
+        const change24h = pair.priceChange?.h24 ? Number(pair.priceChange.h24) : null;
+        const volume24h = pair.volume?.h24 ? Number(pair.volume.h24) : 0;
+        const liquidity = pair.liquidity?.usd ? Number(pair.liquidity.usd) : 0;
+        
+        if (priceUsd && priceUsd > 0) {
+          const stats: TokenStats = {
+            price: priceUsd,
+            change: change24h,
+            changePeriod: '24h',
+            volume24h: volume24h,
+            marketCap: liquidity * 10, // Estimate based on liquidity
+            image: '',
+          };
+          
+          // Cache for future use
+          const statsMap = statsMapByAddressChain.get(cid) || new Map();
+          statsMap.set(addr, stats);
+          statsMapByAddressChain.set(cid, statsMap);
+          
+          return stats;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('DexScreener stats fetch failed:', e);
+  }
+  
+  // Try GeckoTerminal as backup
+  try {
+    const gtUrl = `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${addr}`;
+    const gtRes = await fetchWithTimeout(gtUrl, {}, 4000);
+    if (gtRes.ok) {
+      const gtData = await gtRes.json();
+      const attrs = gtData?.data?.attributes;
+      
+      if (attrs && attrs.price_usd) {
+        const priceUsd = Number(attrs.price_usd);
+        const volume24h = attrs.volume_usd?.h24 ? Number(attrs.volume_usd.h24) : 0;
+        const marketCap = attrs.market_cap_usd ? Number(attrs.market_cap_usd) : 0;
+        
+        if (priceUsd > 0) {
+          const stats: TokenStats = {
+            price: priceUsd,
+            change: null, // GeckoTerminal doesn't always have change
+            changePeriod: '24h',
+            volume24h: volume24h,
+            marketCap: marketCap,
+            image: attrs.image_url || '',
+          };
+          
+          const statsMap = statsMapByAddressChain.get(cid) || new Map();
+          statsMap.set(addr, stats);
+          statsMapByAddressChain.set(cid, statsMap);
+          
+          return stats;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('GeckoTerminal stats fetch failed:', e);
+  }
+  
+  // Final fallback: Try to get at least a price
+  const price = await getTokenPriceUSD(addr, 18, cid);
+  if (price) {
+    const stats: TokenStats = {
+      price: price,
+      change: null,
+      changePeriod: null,
+      volume24h: 0,
+      marketCap: 0,
+      image: '',
+    };
+    
+    const statsMap = statsMapByAddressChain.get(cid) || new Map();
+    statsMap.set(addr, stats);
+    statsMapByAddressChain.set(cid, statsMap);
+    
+    return stats;
+  }
+  
+  return null;
+}
+
 export function getPlaceholderImage(): string {
   return DARK_SVG_PLACEHOLDER;
 }

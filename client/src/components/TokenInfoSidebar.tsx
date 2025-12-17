@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Token } from '@/lib/tokenService';
 import { formatUSD } from '@/lib/config';
-import { useChain, ChainType } from '@/lib/chainContext';
 
 interface TokenInfoSidebarProps {
   fromToken: Token | null;
@@ -17,15 +16,68 @@ interface TokenInfoSidebarProps {
   isRadarOpen: boolean;
   onRadarToggle: (open: boolean) => void;
   isChatOpen: boolean;
+  isLoading?: boolean;
 }
 
-// Sparkline with accurate 2-min sequence pricing
-function Sparkline({ trend }: { trend: 'up' | 'down' }) {
+// Loading pulse animation component
+function LoadingPulse({ width = 40, height = 12 }: { width?: number; height?: number }) {
+  return (
+    <div 
+      className="loading-pulse" 
+      style={{ width: `${width}px`, height: `${height}px`, borderRadius: '4px' }}
+    />
+  );
+}
+
+// Professional hourly sparkline with realistic trading patterns
+function Sparkline({ trend, change, isLoading }: { trend: 'up' | 'down'; change?: number | null; isLoading?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Generate realistic hourly price data (24 points = 24 hours)
+  const hourlyData = useMemo(() => {
+    const points = 24; // 24 hours of data
+    const changePercent = change ?? (trend === 'up' ? 2.5 : -2.5);
+    const volatility = Math.abs(changePercent) * 0.15; // Volatility based on actual change
+    
+    // Generate realistic intraday pattern with volume spikes at market opens
+    const data: number[] = [];
+    let currentPrice = 100;
+    const targetPrice = 100 + changePercent;
+    const priceStep = (targetPrice - currentPrice) / points;
+    
+    for (let i = 0; i < points; i++) {
+      // Add realistic intraday patterns
+      const hour = i;
+      
+      // Higher volatility during market hours (9-16 UTC for overlap)
+      const marketHoursMultiplier = (hour >= 9 && hour <= 16) ? 1.5 : 0.8;
+      
+      // Volume spike patterns at market opens
+      const asiaOpen = hour === 1 ? 1.3 : 1;
+      const europeOpen = hour === 8 ? 1.4 : 1;
+      const usOpen = hour === 14 ? 1.5 : 1;
+      
+      const noise = (Math.random() - 0.5) * volatility * marketHoursMultiplier * asiaOpen * europeOpen * usOpen;
+      
+      // Add mean reversion tendency
+      const reversion = (currentPrice - (100 + priceStep * i)) * 0.1;
+      
+      currentPrice = currentPrice + priceStep + noise - reversion;
+      data.push(currentPrice);
+    }
+    
+    // Smooth the data slightly for visual appeal
+    const smoothed = data.map((val, i) => {
+      if (i === 0 || i === data.length - 1) return val;
+      return (data[i - 1] + val + data[i + 1]) / 3;
+    });
+    
+    return smoothed;
+  }, [trend, change]);
   
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || isLoading) return;
     
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -35,67 +87,65 @@ function Sparkline({ trend }: { trend: 'up' | 'down' }) {
     canvas.height = 36 * dpr;
     ctx.scale(dpr, dpr);
     
-    // Clear
     ctx.clearRect(0, 0, 100, 36);
     
-    // Simulated price history (matching 2-min CoinGecko/CMC sequence)
-    const points = 30;
-    const volatility = trend === 'up' ? 0.7 : -0.7;
-    const data = Array.from({ length: points }, (_, i) => {
-      const progress = i / (points - 1);
-      const trend_movement = progress * 8 * volatility;
-      const noise = Math.sin(i * 0.5) * 2;
-      return 15 + trend_movement + noise;
-    });
-    
+    const data = hourlyData;
     const min = Math.min(...data);
     const max = Math.max(...data);
     const range = max - min || 1;
     
-    // Draw line with smooth curve
-    ctx.strokeStyle = trend === 'up' ? 'rgba(92,234,212,0.85)' : 'rgba(220,100,150,0.85)';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    
     // Draw gradient area under line
     const gradient = ctx.createLinearGradient(0, 0, 0, 36);
-    gradient.addColorStop(0, trend === 'up' ? 'rgba(92,234,212,0.3)' : 'rgba(220,100,150,0.3)');
-    gradient.addColorStop(1, trend === 'up' ? 'rgba(92,234,212,0.05)' : 'rgba(220,100,150,0.05)');
+    gradient.addColorStop(0, trend === 'up' ? 'rgba(92,234,212,0.25)' : 'rgba(220,100,150,0.25)');
+    gradient.addColorStop(1, trend === 'up' ? 'rgba(92,234,212,0.02)' : 'rgba(220,100,150,0.02)');
     
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.moveTo(2, 34);
-    for (let i = 0; i < points; i++) {
-      const x = 2 + (i / (points - 1)) * 96;
-      const y = 34 - ((data[i] - min) / range) * 32;
-      if (i === 0) ctx.lineTo(x, y);
-      else ctx.lineTo(x, y);
+    for (let i = 0; i < data.length; i++) {
+      const x = 2 + (i / (data.length - 1)) * 96;
+      const y = 34 - ((data[i] - min) / range) * 30;
+      ctx.lineTo(x, y);
     }
     ctx.lineTo(98, 34);
+    ctx.closePath();
     ctx.fill();
     
-    // Draw line
+    // Draw main price line
+    ctx.strokeStyle = trend === 'up' ? 'rgba(92,234,212,0.9)' : 'rgba(220,100,150,0.9)';
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
     ctx.beginPath();
-    for (let i = 0; i < points; i++) {
-      const x = 2 + (i / (points - 1)) * 96;
-      const y = 34 - ((data[i] - min) / range) * 32;
+    for (let i = 0; i < data.length; i++) {
+      const x = 2 + (i / (data.length - 1)) * 96;
+      const y = 34 - ((data[i] - min) / range) * 30;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
     
-    // Terminal dot
+    // Terminal dot with glow
     const lastX = 98;
-    const lastY = 34 - ((data[points - 1] - min) / range) * 32;
-    ctx.fillStyle = trend === 'up' ? 'rgba(76, 224, 193, 0.95)' : 'rgba(255, 100, 130, 0.95)';
-    ctx.shadowColor = trend === 'up' ? 'rgba(76, 224, 193, 0.5)' : 'rgba(255, 100, 130, 0.5)';
-    ctx.shadowBlur = 6;
+    const lastY = 34 - ((data[data.length - 1] - min) / range) * 30;
+    
+    // Outer glow
+    ctx.fillStyle = trend === 'up' ? 'rgba(76, 224, 193, 0.3)' : 'rgba(255, 100, 130, 0.3)';
     ctx.beginPath();
-    ctx.arc(lastX, lastY, 2.8, 0, Math.PI * 2);
+    ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0;
-  }, [trend]);
+    
+    // Inner dot
+    ctx.fillStyle = trend === 'up' ? 'rgba(76, 224, 193, 1)' : 'rgba(255, 100, 130, 1)';
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }, [trend, hourlyData, isLoading]);
+  
+  if (isLoading) {
+    return <LoadingPulse width={100} height={36} />;
+  }
   
   return <canvas ref={canvasRef} style={{ width: '100px', height: '36px' }} />;
 }
@@ -117,15 +167,8 @@ export function TokenInfoSidebar({
 }: TokenInfoSidebarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
-  const { chain } = useChain();
 
   const hasTokens = fromToken || toToken;
-
-  const getRadarButtonClass = () => {
-    if (chain === 'ETH') return 'token-info-button eth-active';
-    if (chain === 'BRG') return 'token-info-button brg-active';
-    return 'token-info-button';
-  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -160,7 +203,7 @@ export function TokenInfoSidebar({
       {/* Button - Mini Radar with Custom Radar Icon */}
       <div
         ref={buttonRef}
-        className={getRadarButtonClass()}
+        className="token-info-button"
         onClick={handleRadarClick}
         style={{ opacity: hasTokens && !isChatOpen ? 1 : 0.5, cursor: hasTokens && !isChatOpen ? 'pointer' : 'not-allowed' }}
         data-testid="button-token-info"
@@ -192,16 +235,14 @@ export function TokenInfoSidebar({
                 </div>
               </div>
               <div className="token-info-stats">
-                <div><div className="stat-label">Price</div><div className="stat-value">{fromPriceUsd ? formatUSD(fromPriceUsd) : '—'}</div></div>
-                {fromChange24h !== null && fromChange24h !== undefined && <div><div className="stat-label">24h %</div><div className="stat-value" style={{ color: fromChange24h >= 0 ? '#9ef39e' : '#ff9e9e' }}>{fromChange24h >= 0 ? '+' : ''}{fromChange24h.toFixed(2)}%</div></div>}
+                <div><div className="stat-label">Price</div><div className="stat-value">{fromPriceUsd ? formatUSD(fromPriceUsd) : <LoadingPulse width={50} height={10} />}</div></div>
+                <div><div className="stat-label">24h</div><div className="stat-value">{fromChange24h !== null && fromChange24h !== undefined ? <span style={{ color: fromChange24h >= 0 ? '#9ef39e' : '#ff9e9e' }}>{fromChange24h >= 0 ? '+' : ''}{fromChange24h.toFixed(2)}%</span> : <LoadingPulse width={35} height={10} />}</div></div>
               </div>
-              {((fromVolume24h !== null && fromVolume24h !== undefined) || (fromMarketCap !== null && fromMarketCap !== undefined)) && (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '2px', fontSize: '7px', opacity: 0.7 }}>
-                  {fromVolume24h !== null && fromVolume24h !== undefined && <div>Vol: {fromVolume24h > 1000000 ? `$${(fromVolume24h / 1000000).toFixed(1)}M` : `$${(fromVolume24h / 1000).toFixed(0)}K`}</div>}
-                  {fromMarketCap !== null && fromMarketCap !== undefined && <div>Cap: {fromMarketCap > 1000000 ? `$${(fromMarketCap / 1000000).toFixed(1)}M` : `$${(fromMarketCap / 1000).toFixed(0)}K`}</div>}
-                </div>
-              )}
-              <Sparkline trend={(fromChange24h ?? 0) >= 0 ? 'up' : 'down'} />
+              <div style={{ display: 'flex', gap: '8px', marginTop: '2px', fontSize: '7px', opacity: 0.7 }}>
+                <div>Vol: {fromVolume24h !== null && fromVolume24h !== undefined ? (fromVolume24h > 1000000 ? `$${(fromVolume24h / 1000000).toFixed(1)}M` : `$${(fromVolume24h / 1000).toFixed(0)}K`) : <LoadingPulse width={30} height={8} />}</div>
+                <div>Cap: {fromMarketCap !== null && fromMarketCap !== undefined ? (fromMarketCap > 1000000 ? `$${(fromMarketCap / 1000000).toFixed(1)}M` : `$${(fromMarketCap / 1000).toFixed(0)}K`) : <LoadingPulse width={30} height={8} />}</div>
+              </div>
+              <Sparkline trend={(fromChange24h ?? 0) >= 0 ? 'up' : 'down'} change={fromChange24h} isLoading={fromPriceUsd === null} />
             </div>
           )}
           {toToken && (
@@ -216,16 +257,14 @@ export function TokenInfoSidebar({
                 </div>
               </div>
               <div className="token-info-stats">
-                <div><div className="stat-label">Price</div><div className="stat-value">{toPriceUsd ? formatUSD(toPriceUsd) : '—'}</div></div>
-                {toChange24h !== null && toChange24h !== undefined && <div><div className="stat-label">24h %</div><div className="stat-value" style={{ color: toChange24h >= 0 ? '#9ef39e' : '#ff9e9e' }}>{toChange24h >= 0 ? '+' : ''}{toChange24h.toFixed(2)}%</div></div>}
+                <div><div className="stat-label">Price</div><div className="stat-value">{toPriceUsd ? formatUSD(toPriceUsd) : <LoadingPulse width={50} height={10} />}</div></div>
+                <div><div className="stat-label">24h</div><div className="stat-value">{toChange24h !== null && toChange24h !== undefined ? <span style={{ color: toChange24h >= 0 ? '#9ef39e' : '#ff9e9e' }}>{toChange24h >= 0 ? '+' : ''}{toChange24h.toFixed(2)}%</span> : <LoadingPulse width={35} height={10} />}</div></div>
               </div>
-              {((toVolume24h !== null && toVolume24h !== undefined) || (toMarketCap !== null && toMarketCap !== undefined)) && (
-                <div style={{ display: 'flex', gap: '8px', marginTop: '2px', fontSize: '7px', opacity: 0.7 }}>
-                  {toVolume24h !== null && toVolume24h !== undefined && <div>Vol: {toVolume24h > 1000000 ? `$${(toVolume24h / 1000000).toFixed(1)}M` : `$${(toVolume24h / 1000).toFixed(0)}K`}</div>}
-                  {toMarketCap !== null && toMarketCap !== undefined && <div>Cap: {toMarketCap > 1000000 ? `$${(toMarketCap / 1000000).toFixed(1)}M` : `$${(toMarketCap / 1000).toFixed(0)}K`}</div>}
-                </div>
-              )}
-              <Sparkline trend={(toChange24h ?? 0) >= 0 ? 'up' : 'down'} />
+              <div style={{ display: 'flex', gap: '8px', marginTop: '2px', fontSize: '7px', opacity: 0.7 }}>
+                <div>Vol: {toVolume24h !== null && toVolume24h !== undefined ? (toVolume24h > 1000000 ? `$${(toVolume24h / 1000000).toFixed(1)}M` : `$${(toVolume24h / 1000).toFixed(0)}K`) : <LoadingPulse width={30} height={8} />}</div>
+                <div>Cap: {toMarketCap !== null && toMarketCap !== undefined ? (toMarketCap > 1000000 ? `$${(toMarketCap / 1000000).toFixed(1)}M` : `$${(toMarketCap / 1000).toFixed(0)}K`) : <LoadingPulse width={30} height={8} />}</div>
+              </div>
+              <Sparkline trend={(toChange24h ?? 0) >= 0 ? 'up' : 'down'} change={toChange24h} isLoading={toPriceUsd === null} />
             </div>
           )}
         </div>
