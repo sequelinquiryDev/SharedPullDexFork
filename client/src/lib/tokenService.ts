@@ -506,18 +506,27 @@ async function fetchGeckoTerminalPrice(addr: string, chainId?: number): Promise<
 export async function getTokenPriceUSD(address: string, decimals = 18, chainId?: number): Promise<number | null> {
   if (!address) return null;
   const addr = low(address);
-  const cacheKey = `${chainId ?? config.chainId}-${addr}`;
+  
+  // Ensure chainId is always valid (1 for Ethereum, 137 for Polygon)
+  const validChainId = (chainId === 1 || chainId === 137) ? chainId : config.chainId;
+  
+  // CRITICAL: In BRG mode, never use cached prices across chains
+  // Always verify chainId matches to prevent cross-chain price corruption
+  const cacheKey = `${validChainId}-${addr}`;
   const cached = priceCache.get(cacheKey);
   if (cached && Date.now() - cached.ts < config.priceCacheTtl) {
-    return cached.price;
+    // Double-check the cached price is reasonable before returning
+    if (cached.price && cached.price > 0.000001) {
+      return cached.price;
+    }
   }
 
   const sources = [
-    { name: 'coingecko_simple', fn: () => fetchCoingeckoSimple(addr, chainId), priority: 1, retries: 2 },
-    { name: '0x', fn: () => fetch0xPrice(addr, chainId), priority: 2, retries: 2 },
-    { name: '1inch', fn: () => fetch1InchQuotePrice(addr, decimals, chainId), priority: 3, retries: 2 },
+    { name: 'coingecko_simple', fn: () => fetchCoingeckoSimple(addr, validChainId), priority: 1, retries: 2 },
+    { name: '0x', fn: () => fetch0xPrice(addr, validChainId), priority: 2, retries: 2 },
+    { name: '1inch', fn: () => fetch1InchQuotePrice(addr, decimals, validChainId), priority: 3, retries: 2 },
     { name: 'dexscreener', fn: () => fetchDexscreenerPrice(addr), priority: 4, retries: 1 },
-    { name: 'geckoterminal', fn: () => fetchGeckoTerminalPrice(addr, chainId), priority: 5, retries: 1 },
+    { name: 'geckoterminal', fn: () => fetchGeckoTerminalPrice(addr, validChainId), priority: 5, retries: 1 },
   ];
 
   let best: { price: number; priority: number } | null = null;
@@ -526,7 +535,8 @@ export async function getTokenPriceUSD(address: string, decimals = 18, chainId?:
     for (let attempt = 0; attempt <= source.retries; attempt++) {
       try {
         const price = await source.fn();
-        if (price && Number.isFinite(price) && price > 0) {
+        // CRITICAL: Filter out unreasonable prices (< 0.000001) which indicate wrong chain lookups
+        if (price && Number.isFinite(price) && price > 0.000001) {
           if (!best || source.priority < best.priority) {
             best = { price, priority: source.priority };
             break;
@@ -546,7 +556,10 @@ export async function getTokenPriceUSD(address: string, decimals = 18, chainId?:
   }
 
   const finalPrice = best?.price ?? null;
-  priceCache.set(cacheKey, { price: finalPrice, ts: Date.now() });
+  // Only cache valid prices to prevent cross-chain corruption
+  if (finalPrice && finalPrice > 0.000001) {
+    priceCache.set(cacheKey, { price: finalPrice, ts: Date.now() });
+  }
   return finalPrice;
 }
 
