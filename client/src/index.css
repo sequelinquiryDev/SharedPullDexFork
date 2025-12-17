@@ -105,6 +105,29 @@ html {
   color-scheme: dark;
 }
 
+/* ===== WATER STEAM ANIMATION FOR LOGO AURA ===== */
+@keyframes water-wave-1 {
+  0% { transform: translateY(0px) scaleX(1); opacity: 0.6; }
+  50% { transform: translateY(-3px) scaleX(1.1); opacity: 0.3; }
+  100% { transform: translateY(-6px) scaleX(0.9); opacity: 0; }
+}
+
+@keyframes water-wave-2 {
+  0% { transform: translateY(0px) scaleX(0.9); opacity: 0.5; }
+  50% { transform: translateY(-4px) scaleX(1.05); opacity: 0.25; }
+  100% { transform: translateY(-8px) scaleX(0.85); opacity: 0; }
+}
+
+@keyframes water-wave-3 {
+  0% { transform: translateY(0px) scaleX(1.05); opacity: 0.4; }
+  50% { transform: translateY(-3.5px) scaleX(1); opacity: 0.2; }
+  100% { transform: translateY(-7px) scaleX(0.95); opacity: 0; }
+}
+
+.logo-aura-animated {
+  animation: water-wave-1 2.5s ease-in-out infinite;
+}
+
 /* ===== BODY & BACKGROUND ===== */
 body {
   margin: 0;
@@ -833,6 +856,9 @@ body.eth-chain .glassy-btn.connected {
   display: flex;
   margin-top: auto;
   gap: 6px;
+  padding: 12px;
+  margin-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.1);
 }
 
 .chat-input input {
