@@ -1343,7 +1343,7 @@ body.eth-chain .glassy-btn.connected {
 .token-info-button {
   position: fixed;
   top: 50%;
-  right: 18px;
+  right: 12px;
   transform: translateY(-50%);
   width: 48px;
   height: 48px;
@@ -1376,7 +1376,7 @@ body.eth-chain .glassy-btn.connected {
 .token-info-text {
   position: absolute;
   top: 50%;
-  right: 58px;
+  right: 62px;
   transform: translateY(-50%);
   font-size: 11px;
   white-space: nowrap;
@@ -1388,7 +1388,7 @@ body.eth-chain .glassy-btn.connected {
 .token-info-container {
   position: fixed;
   top: 50%;
-  right: 74px;
+  right: 12px;
   transform: translateY(-50%);
   width: auto;
   max-width: 70vw;
@@ -1397,7 +1397,7 @@ body.eth-chain .glassy-btn.connected {
   border: 1px solid rgba(92,234,212,0.25);
   border-radius: 10px;
   backdrop-filter: blur(12px);
-  z-index: 999;
+  z-index: 998;
   max-height: 90vh;
   overflow-x: auto;
   overflow-y: hidden;
@@ -1406,6 +1406,7 @@ body.eth-chain .glassy-btn.connected {
   display: flex;
   flex-direction: row;
   gap: 12px;
+  margin-right: 60px;
 }
 
 @keyframes slideUp {
