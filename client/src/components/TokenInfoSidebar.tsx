@@ -187,7 +187,7 @@ export function TokenInfoSidebar({
                 <div><div className="stat-label">Price</div><div className="stat-value">{fromPriceUsd ? formatUSD(fromPriceUsd) : '—'}</div></div>
                 {fromChange24h !== null && fromChange24h !== undefined && <div><div className="stat-label">24h %</div><div className="stat-value" style={{ color: fromChange24h >= 0 ? '#9ef39e' : '#ff9e9e' }}>{fromChange24h >= 0 ? '+' : ''}{fromChange24h.toFixed(2)}%</div></div>}
               </div>
-              {(fromVolume24h !== null && fromVolume24h !== undefined) || (fromMarketCap !== null && fromMarketCap !== undefined) && (
+              {((fromVolume24h !== null && fromVolume24h !== undefined) || (fromMarketCap !== null && fromMarketCap !== undefined)) && (
                 <div style={{ display: 'flex', gap: '8px', marginTop: '2px', fontSize: '7px', opacity: 0.7 }}>
                   {fromVolume24h !== null && fromVolume24h !== undefined && <div>Vol: {fromVolume24h > 1000000 ? `$${(fromVolume24h / 1000000).toFixed(1)}M` : `$${(fromVolume24h / 1000).toFixed(0)}K`}</div>}
                   {fromMarketCap !== null && fromMarketCap !== undefined && <div>Cap: {fromMarketCap > 1000000 ? `$${(fromMarketCap / 1000000).toFixed(1)}M` : `$${(fromMarketCap / 1000).toFixed(0)}K`}</div>}
@@ -211,7 +211,7 @@ export function TokenInfoSidebar({
                 <div><div className="stat-label">Price</div><div className="stat-value">{toPriceUsd ? formatUSD(toPriceUsd) : '—'}</div></div>
                 {toChange24h !== null && toChange24h !== undefined && <div><div className="stat-label">24h %</div><div className="stat-value" style={{ color: toChange24h >= 0 ? '#9ef39e' : '#ff9e9e' }}>{toChange24h >= 0 ? '+' : ''}{toChange24h.toFixed(2)}%</div></div>}
               </div>
-              {(toVolume24h !== null && toVolume24h !== undefined) || (toMarketCap !== null && toMarketCap !== undefined) && (
+              {((toVolume24h !== null && toVolume24h !== undefined) || (toMarketCap !== null && toMarketCap !== undefined)) && (
                 <div style={{ display: 'flex', gap: '8px', marginTop: '2px', fontSize: '7px', opacity: 0.7 }}>
                   {toVolume24h !== null && toVolume24h !== undefined && <div>Vol: {toVolume24h > 1000000 ? `$${(toVolume24h / 1000000).toFixed(1)}M` : `$${(toVolume24h / 1000).toFixed(0)}K`}</div>}
                   {toMarketCap !== null && toMarketCap !== undefined && <div>Cap: {toMarketCap > 1000000 ? `$${(toMarketCap / 1000000).toFixed(1)}M` : `$${(toMarketCap / 1000).toFixed(0)}K`}</div>}
