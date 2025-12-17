@@ -44,7 +44,7 @@ interface ChatRateLimitEntry {
 }
 
 const chatRateLimits = new Map<string, ChatRateLimitEntry>();
-const CHAT_MAX_PER_DAY = 3; // Maximum 3 messages per day per IP
+const CHAT_MAX_PER_DAY = 10; // Maximum 10 messages per day per IP
 const CHAT_COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes between messages
 
 // Get the start of the current "day" at 12:00 GMT

@@ -566,19 +566,34 @@ body.eth-chain .glassy-btn.connected {
   position: fixed;
   right: 20px;
   bottom: 20px;
-  background: #7A4988;
+  background: linear-gradient(135deg, rgba(180, 68, 255, 0.15), rgba(112, 19, 255, 0.1));
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(180, 68, 255, 0.3);
   padding: 10px 14px;
-  border-radius: 20px;
+  border-radius: 12px;
   cursor: pointer;
-  box-shadow: 0 0 15px rgba(180, 0, 255, 0.35);
+  box-shadow: 0 4px 12px rgba(180, 68, 255, 0.2);
   z-index: 65;
-  transition: 0.3s ease;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   min-height: 44px;
   min-width: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   -webkit-tap-highlight-color: transparent;
+  color: #b445ff;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.chat-toggle:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(180, 68, 255, 0.3);
+  border-color: rgba(180, 68, 255, 0.5);
+}
+
+.chat-toggle:active {
+  transform: translateY(0);
 }
 
 .chat-sidebar {
@@ -1342,7 +1357,7 @@ body.eth-chain .glassy-btn.connected {
 /* ===== TOKEN INFO BUTTON & SIDEBAR ===== */
 .token-info-button {
   position: fixed;
-  bottom: 123px;
+  bottom: 145px;
   left: 18px;
   width: 48px;
   height: 48px;
@@ -1385,7 +1400,7 @@ body.eth-chain .glassy-btn.connected {
 
 .token-info-container {
   position: fixed;
-  bottom: 181px;
+  bottom: 203px;
   left: 18px;
   width: auto;
   max-width: 70vw;
