@@ -89,7 +89,8 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
 
       
     }
-  }, [isOpeeEffect(() => {
+  }, [isOpe
+      eEffect(() => {
 messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
