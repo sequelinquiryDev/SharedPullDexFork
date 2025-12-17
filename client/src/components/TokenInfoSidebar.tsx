@@ -270,7 +270,7 @@ export function TokenInfoSidebar({
                     {currentSource === 'cmc' ? (
                       <SiCoinmarketcap size={12} style={{ color: '#17f0cb' }} />
                     ) : (
-                      <img src="https://assets.coingecko.com/coins/images/1/small/bitcoin.png?1547033579" alt="CoinGecko" style={{ width: '12px', height: '12px', borderRadius: '50%' }} />
+                      <img src="https://www.coingecko.com/static/coingecko-logo-47f0ca75090b7a38f7939db3541505ac029403b95eee9c3db3f5b286ba4baf31.png" alt="CoinGecko" style={{ width: '12px', height: '12px' }} />
                     )}
                   </div>
                   <span>{timeInCycle}s</span>
@@ -304,7 +304,7 @@ export function TokenInfoSidebar({
                     {currentSource === 'cmc' ? (
                       <SiCoinmarketcap size={12} style={{ color: '#17f0cb' }} />
                     ) : (
-                      <img src="https://assets.coingecko.com/coins/images/1/small/bitcoin.png?1547033579" alt="CoinGecko" style={{ width: '12px', height: '12px', borderRadius: '50%' }} />
+                      <img src="https://www.coingecko.com/static/coingecko-logo-47f0ca75090b7a38f7939db3541505ac029403b95eee9c3db3f5b286ba4baf31.png" alt="CoinGecko" style={{ width: '12px', height: '12px' }} />
                     )}
                   </div>
                   <span>{timeInCycle}s</span>
