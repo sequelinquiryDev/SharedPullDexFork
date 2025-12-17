@@ -293,21 +293,19 @@ body::before {
   padding: 6px;
   max-height: 240px;
   overflow-y: auto;
-  z-index: 9998;
+  z-index: 10000;
   box-shadow: 0 10px 30px rgba(120,0,255,0.15);
   -webkit-overflow-scrolling: touch;
-  display: none;
-  visibility: hidden;
   opacity: 0;
   transform: translateY(-10px);
   transition: all 0.3s ease;
+  pointer-events: none;
 }
 
 .suggestions.show {
-  display: block;
-  visibility: visible;
   opacity: 1;
   transform: translateY(0);
+  pointer-events: auto;
 }
 
 .suggestion-item {
@@ -1145,9 +1143,11 @@ body.eth-chain .glassy-btn.connected {
   padding: 6px;
   max-height: 280px;
   overflow-y: auto;
-  z-index: 220;
+  z-index: 10000;
   box-shadow: 0 10px 30px rgba(120,0,255,0.08);
   -webkit-overflow-scrolling: touch;
+  display: block !important;
+  visibility: visible !important;
 }
 
 
@@ -1342,7 +1342,7 @@ body.eth-chain .glassy-btn.connected {
 /* ===== TOKEN INFO BUTTON & SIDEBAR ===== */
 .token-info-button {
   position: fixed;
-  bottom: 90px;
+  bottom: 160px;
   left: 18px;
   width: 48px;
   height: 48px;
@@ -1355,7 +1355,7 @@ body.eth-chain .glassy-btn.connected {
   cursor: pointer;
   color: #5ceac4;
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 50;
+  z-index: 51;
   backdrop-filter: blur(10px);
   box-shadow: 0 4px 12px rgba(92,234,212,0.15);
 }
