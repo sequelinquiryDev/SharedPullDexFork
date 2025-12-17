@@ -29,6 +29,20 @@ interface ChatPanelProps {
   onOpenChange?: (open: boolean) => void;
 }
 
+// Generate consistent random color for username
+const getUsernameColor = (username: string): string => {
+  const colors = [
+    '#FF6B9D', '#C44569', '#F8B500', '#1ABC9C', '#3498DB',
+    '#9B59B6', '#E74C3C', '#1E8449', '#D68910', '#7D3C98',
+    '#2980B9', '#27AE60', '#E67E22', '#C0392B', '#16A085'
+  ];
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) {
+    hash = username.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+};
+
 export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelProps = {}) {
   const { address, isConnected } = useAccount();
   const { chain } = useChain();
@@ -424,7 +438,7 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
                 
                 {/* Message content - clickable */}
                 <div onClick={() => handleMessageTap(msg.id)} style={{ cursor: 'pointer' }}>
-                  <div style={{ fontWeight: 700, fontSize: '12px', color: chainColors.primary, marginBottom: '4px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '12px', color: getUsernameColor(msg.username), marginBottom: '4px' }}>
                     {msg.username}
                   </div>
                   <div>{msg.message}</div>
@@ -461,8 +475,8 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
                   <div 
                     style={{
                       display: 'flex',
-                      gap: '6px',
-                      marginTop: '8px',
+                      gap: '4px',
+                      marginTop: '6px',
                       justifyContent: 'center',
                       animation: 'slideIn 0.2s ease'
                     }}
@@ -471,11 +485,11 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
                       onClick={(e) => { e.stopPropagation(); handleReaction(msg.id, 'like'); }}
                       disabled={isReacting}
                       style={{
-                        width: '40px',
-                        height: '40px',
+                        width: '32px',
+                        height: '32px',
                         borderRadius: '50%',
-                        border: `2px solid ${chainColors.primary}`,
-                        background: stats?.userReaction === 'like' ? chainColors.primary : 'rgba(0,0,0,0.4)',
+                        border: `1.5px solid ${chainColors.primary}`,
+                        background: stats?.userReaction === 'like' ? chainColors.primary : 'rgba(0,0,0,0.3)',
                         color: stats?.userReaction === 'like' ? '#fff' : chainColors.primary,
                         cursor: isReacting ? 'not-allowed' : 'pointer',
                         display: 'flex',
@@ -487,17 +501,17 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
                       }}
                       data-testid={`button-like-${msg.id}`}
                     >
-                      <ThumbsUp size={18} />
+                      <ThumbsUp size={14} />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleReaction(msg.id, 'dislike'); }}
                       disabled={isReacting}
                       style={{
-                        width: '40px',
-                        height: '40px',
+                        width: '32px',
+                        height: '32px',
                         borderRadius: '50%',
-                        border: '2px solid #ff6b6b',
-                        background: stats?.userReaction === 'dislike' ? '#ff6b6b' : 'rgba(0,0,0,0.4)',
+                        border: '1.5px solid #ff6b6b',
+                        background: stats?.userReaction === 'dislike' ? '#ff6b6b' : 'rgba(0,0,0,0.3)',
                         color: stats?.userReaction === 'dislike' ? '#fff' : '#ff6b6b',
                         cursor: isReacting ? 'not-allowed' : 'pointer',
                         display: 'flex',
@@ -509,7 +523,7 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
                       }}
                       data-testid={`button-dislike-${msg.id}`}
                     >
-                      <ThumbsDown size={18} />
+                      <ThumbsDown size={14} />
                     </button>
                   </div>
                 )}
