@@ -398,7 +398,17 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
           }}
           data-testid="container-chat-messages"
         >
-          {messages.map((msg) => {
+          {/* Sort messages: pinned (top 3) first, then rest */}
+          {messages.sort((a, b) => {
+            const aRank = getAuraRank(a.id);
+            const bRank = getAuraRank(b.id);
+            // Pinned messages come first (ranked > 0)
+            if (aRank > 0 && bRank === 0) return -1;
+            if (aRank === 0 && bRank > 0) return 1;
+            // Among pinned, sort by rank (1, 2, 3)
+            if (aRank > 0 && bRank > 0) return aRank - bRank;
+            return 0;
+          }).map((msg) => {
             const stats = reactionStats[msg.id];
             const auraRank = getAuraRank(msg.id);
             const isActive = activeReactionMsg === msg.id;
@@ -454,7 +464,7 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
                   </div>
                   <div>{msg.message}</div>
                   
-                  {/* Reaction counts display - Current hour + Total history */}
+                  {/* Reaction counts display */}
                   {stats && (stats.likes > 0 || stats.totalLikes > 0 || stats.dislikes > 0 || stats.totalDislikes > 0) && (
                     <div 
                       style={{
@@ -466,28 +476,24 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
                         flexWrap: 'wrap'
                       }}
                     >
-                      {/* Current hour likes (for ranking) */}
                       {stats.likes > 0 && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: chainColors.primary, fontWeight: 600 }}>
                           <ThumbsUp size={11} />
-                          <span className={isReacting ? 'count-animate' : ''}>{stats.likes}h</span>
+                          <span className={isReacting ? 'count-animate' : ''}>{stats.likes}</span>
                         </span>
                       )}
-                      {/* Total all-time likes (history) */}
                       {stats.totalLikes > stats.likes && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: chainColors.primary, opacity: 0.65 }}>
                           <span className={isReacting ? 'count-animate' : ''}>{stats.totalLikes}∑</span>
                         </span>
                       )}
                       
-                      {/* Current hour dislikes */}
                       {stats.dislikes > 0 && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#ff6b6b', fontWeight: 600 }}>
                           <ThumbsDown size={11} />
-                          <span className={isReacting ? 'count-animate' : ''}>{stats.dislikes}h</span>
+                          <span className={isReacting ? 'count-animate' : ''}>{stats.dislikes}</span>
                         </span>
                       )}
-                      {/* Total all-time dislikes */}
                       {stats.totalDislikes > stats.dislikes && (
                         <span style={{ display: 'flex', alignItems: 'center', gap: '2px', color: '#ff6b6b', opacity: 0.65 }}>
                           <span className={isReacting ? 'count-animate' : ''}>{stats.totalDislikes}∑</span>
