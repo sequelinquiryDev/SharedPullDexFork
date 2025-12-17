@@ -283,3 +283,7 @@ messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     </>
   );
 }
+
+function VieweEffect(arg0: () => void, arg1: Message[][]) {
+          throw new Error('Function not implemented.');
+      }
