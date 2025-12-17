@@ -160,6 +160,8 @@ export function TokenInfoSidebar({
   toVolume24h,
   fromMarketCap,
   toMarketCap,
+  fromPriceHistory,
+  toPriceHistory,
   isRadarOpen,
   onRadarToggle,
   isChatOpen,
