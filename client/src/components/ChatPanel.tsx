@@ -86,14 +86,11 @@ export function ChatPanel({ isOpen: externalIsOpen, onOpenChange }: ChatPanelPro
       }, 300);
 
       return () => {
-        if (unsubscribe) unsubscribe();
-        clearInterval(pollInterval);
-      };
-    }
-  }, [isOpen, username]);
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      
+    }
+  }, [isOpeeEffect(() => {
+messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
