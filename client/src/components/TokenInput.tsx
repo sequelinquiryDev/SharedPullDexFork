@@ -158,6 +158,13 @@ export function TokenInput({
     searchTimeoutRef.current = setTimeout(() => {
       handleSearch(value.trim().toLowerCase());
     }, 150);
+    
+    // Move cursor to end when typing
+    setTimeout(() => {
+      if (inputRef.current && value) {
+        inputRef.current.setSelectionRange(value.length, value.length);
+      }
+    }, 0);
   };
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -319,9 +326,17 @@ export function TokenInput({
             type="number"
             placeholder={isEstimate ? 'Estimate' : 'Amount'}
             value={amount}
-            onChange={(e) => onAmountChange(e.target.value)}
+            onChange={(e) => {
+              onAmountChange(e.target.value);
+              // Move cursor to end when typing
+              setTimeout(() => {
+                if (e.target.value) {
+                  e.target.setSelectionRange(e.target.value.length, e.target.value.length);
+                }
+              }, 0);
+            }}
             onFocus={(e) => {
-              // Move cursor to end of amount input
+              // Move cursor to end on focus
               if (e.target.value) {
                 e.target.setSelectionRange(e.target.value.length, e.target.value.length);
               }

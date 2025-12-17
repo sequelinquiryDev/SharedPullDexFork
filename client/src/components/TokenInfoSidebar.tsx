@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Token } from '@/lib/tokenService';
 import { formatUSD } from '@/lib/config';
+import { SiCoinmarketcap } from 'react-icons/si';
 
 interface TokenInfoSidebarProps {
   fromToken: Token | null;
@@ -264,9 +265,16 @@ export function TokenInfoSidebar({
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
                 <Sparkline trend={(fromChange24h ?? 0) >= 0 ? 'up' : 'down'} change={fromChange24h} isLoading={fromPriceUsd === null} priceHistory={fromPriceHistory} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '8px', opacity: 0.6 }}>
-                  <div title={currentSource === 'cmc' ? 'CoinMarketCap' : 'CoinGecko'} style={{ width: '10px', height: '10px', borderRadius: '50%', background: currentSource === 'cmc' ? '#17f0cb' : '#ef7615', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '6px', color: '#000', fontWeight: 'bold' }}>
-                    {currentSource === 'cmc' ? 'C' : 'G'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '8px', opacity: 0.7 }}>
+                  <div title={currentSource === 'cmc' ? 'CoinMarketCap' : 'CoinGecko'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '12px', height: '12px' }}>
+                    {currentSource === 'cmc' ? (
+                      <SiCoinmarketcap size={12} style={{ color: '#17f0cb' }} />
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#ef7615' }}>
+                        <circle cx="12" cy="12" r="10" />
+                        <text x="12" y="15" textAnchor="middle" fill="white" fontSize="8" fontWeight="bold">G</text>
+                      </svg>
+                    )}
                   </div>
                   <span>{timeInCycle}s</span>
                 </div>
@@ -294,9 +302,16 @@ export function TokenInfoSidebar({
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
                 <Sparkline trend={(toChange24h ?? 0) >= 0 ? 'up' : 'down'} change={toChange24h} isLoading={toPriceUsd === null} priceHistory={toPriceHistory} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '8px', opacity: 0.6 }}>
-                  <div title={currentSource === 'cmc' ? 'CoinMarketCap' : 'CoinGecko'} style={{ width: '10px', height: '10px', borderRadius: '50%', background: currentSource === 'cmc' ? '#17f0cb' : '#ef7615', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '6px', color: '#000', fontWeight: 'bold' }}>
-                    {currentSource === 'cmc' ? 'C' : 'G'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '8px', opacity: 0.7 }}>
+                  <div title={currentSource === 'cmc' ? 'CoinMarketCap' : 'CoinGecko'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '12px', height: '12px' }}>
+                    {currentSource === 'cmc' ? (
+                      <SiCoinmarketcap size={12} style={{ color: '#17f0cb' }} />
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ color: '#ef7615' }}>
+                        <circle cx="12" cy="12" r="10" />
+                        <text x="12" y="15" textAnchor="middle" fill="white" fontSize="8" fontWeight="bold">G</text>
+                      </svg>
+                    )}
                   </div>
                   <span>{timeInCycle}s</span>
                 </div>
