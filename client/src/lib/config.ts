@@ -179,7 +179,7 @@ export const isAddress = (v: string) => /^0x[a-fA-F0-9]{40}$/.test((v || '').tri
 
 export const low = (s: string) => (s || '').toLowerCase();
 
-export const formatUSD = (v: number | null | undefined): string => {
+export const formatUSD = (v: number | null | undefined, forSuggestions: boolean = false): string => {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
   const n = Number(v);
   const opts: Intl.NumberFormatOptions = {
@@ -196,21 +196,21 @@ export const formatUSD = (v: number | null | undefined): string => {
     opts.maximumFractionDigits = 2;
     opts.minimumFractionDigits = 2;
   } else if (absN >= 1) {
-    opts.maximumFractionDigits = 2;
+    opts.maximumFractionDigits = forSuggestions ? 4 : 2;
     opts.minimumFractionDigits = 2;
   } else if (absN >= 0.01) {
-    opts.maximumFractionDigits = 4;
+    opts.maximumFractionDigits = forSuggestions ? 6 : 4;
     opts.minimumFractionDigits = 2;
   } else if (absN >= 0.0001) {
-    opts.maximumFractionDigits = 6;
-    opts.minimumFractionDigits = 4;
+    opts.maximumFractionDigits = forSuggestions ? 8 : 6;
+    opts.minimumFractionDigits = forSuggestions ? 6 : 4;
   } else if (absN >= 0.00000001) {
-    opts.maximumFractionDigits = 10;
-    opts.minimumFractionDigits = 6;
+    opts.maximumFractionDigits = forSuggestions ? 12 : 10;
+    opts.minimumFractionDigits = forSuggestions ? 8 : 6;
   } else {
     // Very small values (like some micro-cap tokens)
-    opts.maximumFractionDigits = 12;
-    opts.minimumFractionDigits = 8;
+    opts.maximumFractionDigits = 14;
+    opts.minimumFractionDigits = 10;
   }
   
   return new Intl.NumberFormat('en-US', opts).format(n);

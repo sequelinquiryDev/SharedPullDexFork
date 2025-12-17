@@ -254,10 +254,11 @@ export function TokenInput({
       );
     };
 
+    // Update prices immediately when showing suggestions or chain changes
     updatePrices();
-    const priceInterval = setInterval(updatePrices, 8000);
+    const priceInterval = setInterval(updatePrices, 5000);
     return () => clearInterval(priceInterval);
-  }, [showSuggestions, chain]);
+  }, [showSuggestions, suggestions.length, chain]);
 
   useEffect(() => {
     return () => {
@@ -435,7 +436,7 @@ export function TokenInput({
                   </div>
                   <div className="suggestion-price-pill">
                     <div style={{ fontSize: '12px', fontWeight: 700 }}>
-                      {token.currentPrice ? formatUSD(token.currentPrice) : '—'}
+                      {token.currentPrice ? formatUSD(token.currentPrice, true) : '—'}
                     </div>
                     {typeof token.priceChange24h === 'number' && (
                       <div
