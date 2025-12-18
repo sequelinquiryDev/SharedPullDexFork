@@ -243,6 +243,56 @@ export default function Home() {
   }, [fromToken, toToken, chain]);
 
   const setDefaultTokensForChain = useCallback(async (chainType: ChainType) => {
+    if (chainType === 'BRG') {
+      // BRG mode: Set defaults from both chains (ETH -> POL)
+      await loadTokensForChain(1);
+      await loadTokensForChain(137);
+      
+      const ethTokenMap = getTokenMap(1);
+      const polTokenMap = getTokenMap(137);
+      
+      // Default: Ethereum WETH -> Polygon WETH
+      const fromTokenAddr = low(ETHEREUM_DEFAULTS.fromToken);
+      const toTokenAddr = low(POLYGON_DEFAULTS.toToken);
+      
+      let newFromToken = ethTokenMap.get(fromTokenAddr);
+      let newToToken = polTokenMap.get(toTokenAddr);
+      
+      // Fallback: Native ETH
+      if (!newFromToken) {
+        newFromToken = {
+          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+          symbol: 'ETH',
+          name: 'Ethereum',
+          decimals: 18,
+          logoURI: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
+          chainId: 1,
+        } as ExtendedToken;
+        console.log('[BRG Defaults] Created native ETH token on Ethereum');
+      } else {
+        newFromToken = { ...newFromToken, chainId: 1 } as ExtendedToken;
+      }
+      
+      // Fallback: Polygon WETH
+      if (!newToToken) {
+        newToToken = {
+          address: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
+          symbol: 'WETH',
+          name: 'Wrapped Ether',
+          decimals: 18,
+          logoURI: 'https://assets.coingecko.com/coins/images/2518/small/weth.png',
+          chainId: 137,
+        } as ExtendedToken;
+        console.log('[BRG Defaults] Created WETH token on Polygon');
+      } else {
+        newToToken = { ...newToToken, chainId: 137 } as ExtendedToken;
+      }
+      
+      setFromToken(newFromToken);
+      setToToken(newToToken);
+      return;
+    }
+    
     let targetChainId: number;
     let defaults: any;
     
@@ -253,9 +303,6 @@ export default function Home() {
       targetChainId = 137;
       defaults = POLYGON_DEFAULTS;
     } else {
-      // BRG mode - load both chains
-      await loadTokensForChain(1);
-      await loadTokensForChain(137);
       return;
     }
     
@@ -276,7 +323,8 @@ export default function Home() {
         name: 'Ethereum',
         decimals: 18,
         logoURI: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
-      };
+        chainId: 1,
+      } as ExtendedToken;
       console.log('[ETH Defaults] Created native ETH token with 0x standard address');
     }
     
@@ -288,12 +336,19 @@ export default function Home() {
         name: 'USD Coin',
         decimals: 6,
         logoURI: 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',
-      };
+        chainId: 1,
+      } as ExtendedToken;
       console.log('[ETH Defaults] Created USDC token with verified address');
     }
     
-    if (newFromToken) setFromToken(newFromToken);
-    if (newToToken) setToToken(newToToken);
+    if (newFromToken) {
+      newFromToken = { ...newFromToken, chainId: targetChainId } as ExtendedToken;
+      setFromToken(newFromToken);
+    }
+    if (newToToken) {
+      newToToken = { ...newToToken, chainId: targetChainId } as ExtendedToken;
+      setToToken(newToToken);
+    }
   }, []);
 
   useEffect(() => {
@@ -386,8 +441,8 @@ export default function Home() {
       showToast(`Selected ${token.symbol} as FROM token`, { type: 'success', ttl: 2000 });
       clearSelection();
       
-      // Load historical price data for sparkline
-      const chainId = chain === 'ETH' ? 1 : 137;
+      // Load historical price data for sparkline - use token's chainId if available
+      const chainId = token.chainId || (chain === 'ETH' ? 1 : 137);
       getHistoricalPriceData(token, chainId).then(history => {
         if (history.length > 0) {
           priceHistoryRef.current.from = history;
