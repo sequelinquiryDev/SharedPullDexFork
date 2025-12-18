@@ -456,14 +456,22 @@ async function fetchCoingeckoSimple(addr: string, chainId?: number): Promise<num
   }
 }
 
-async function fetchDexscreenerPrice(addr: string): Promise<number | null> {
+async function fetchDexscreenerPrice(addr: string, chainId?: number): Promise<number | null> {
+  const cid = chainId ?? config.chainId;
+  const chainFilter = cid === 1 ? 'ethereum' : 'polygon';
+  
   try {
     const url = `https://api.dexscreener.com/latest/dex/tokens/${addr}`;
     const res = await fetchWithTimeout(url, {}, 3000);
     if (!res.ok) throw new Error('dexscreener non-ok');
     const j = await res.json();
     const pairs = j?.pairs || [];
-    for (const p of pairs) {
+    
+    // CRITICAL: Filter by chain to prevent cross-chain price corruption
+    const chainPairs = pairs.filter((p: any) => p?.chainId === chainFilter);
+    const searchPairs = chainPairs.length > 0 ? chainPairs : pairs;
+    
+    for (const p of searchPairs) {
       if (p?.priceUsd) {
         const v = Number(p.priceUsd);
         if (Number.isFinite(v) && v > 0) return v;
@@ -525,7 +533,7 @@ export async function getTokenPriceUSD(address: string, decimals = 18, chainId?:
     { name: 'coingecko_simple', fn: () => fetchCoingeckoSimple(addr, validChainId), priority: 1, retries: 2 },
     { name: '0x', fn: () => fetch0xPrice(addr, validChainId), priority: 2, retries: 2 },
     { name: '1inch', fn: () => fetch1InchQuotePrice(addr, decimals, validChainId), priority: 3, retries: 2 },
-    { name: 'dexscreener', fn: () => fetchDexscreenerPrice(addr), priority: 4, retries: 1 },
+    { name: 'dexscreener', fn: () => fetchDexscreenerPrice(addr, validChainId), priority: 4, retries: 1 },
     { name: 'geckoterminal', fn: () => fetchGeckoTerminalPrice(addr, validChainId), priority: 5, retries: 1 },
   ];
 
