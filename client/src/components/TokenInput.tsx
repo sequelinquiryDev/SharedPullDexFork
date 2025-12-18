@@ -40,6 +40,7 @@ export function TokenInput({
   const containerRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSelectedAddressRef = useRef<string>('');
+  const firstClickRef = useRef<boolean>(true);
 
   const handleSearch = useCallback(async (query: string) => {
     // BRG mode: search both chains; otherwise single chain
@@ -161,17 +162,15 @@ export function TokenInput({
   };
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    // Move cursor to end of input on focus
-    e.target.setSelectionRange(e.target.value.length, e.target.value.length);
     handleSearch(searchQuery.trim().toLowerCase());
   };
 
   const handleInputClick = (e: React.MouseEvent<HTMLInputElement>) => {
-    // Ensure cursor is at end on click
-    const target = e.currentTarget;
-    setTimeout(() => {
-      target.setSelectionRange(target.value.length, target.value.length);
-    }, 0);
+    // Move cursor to end only on first click
+    if (firstClickRef.current) {
+      e.currentTarget.setSelectionRange(e.currentTarget.value.length, e.currentTarget.value.length);
+      firstClickRef.current = false;
+    }
   };
 
   const handleBlur = () => {
