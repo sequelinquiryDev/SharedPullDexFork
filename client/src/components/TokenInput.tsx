@@ -46,8 +46,18 @@ export function TokenInput({
   const isLikelyScam = (token: ExtendedToken & { currentPrice?: number; priceChange24h?: number; marketCap?: number }, allTokensInResults?: any[]) => {
     const symbol = token.symbol.toUpperCase();
     const name = token.name.toUpperCase();
+    const tokenChainId = token.chainId || 0;
     
-    // Obvious scam patterns
+    // ALWAYS KEEP real major coins on their native chains
+    if (symbol === 'ETH' && tokenChainId === 1) return false;
+    if (symbol === 'POL' && tokenChainId === 137) return false;
+    if ((symbol === 'MATIC') && tokenChainId === 137) return false; // MATIC on Polygon
+    if (symbol === 'BTC' && tokenChainId === 1) return false;
+    if ((symbol === 'USDT' || symbol === 'USDC') && (tokenChainId === 1 || tokenChainId === 137)) return false;
+    if (symbol === 'BNB' && tokenChainId === 56) return false;
+    if (symbol === 'SOL' && tokenChainId === 101) return false;
+    
+    // Obvious scam patterns in name
     const scamPatterns = [
       /fake\s+/i,
       /clone\s+/i,
@@ -56,15 +66,40 @@ export function TokenInput({
       /pump\s+/i,
       /test\s+/i,
       /token\s+\d+/i,
-      /\s+v\d+$/i, // "ETH v2", "USDT v3" etc - likely clones
+      /\s+v\d+\s*$/i, // "ETH v2", "USDT v3" etc - likely clones
+      /copy\s+of/i,
+      /knock\s+off/i,
     ];
     
     if (scamPatterns.some(p => p.test(name) || p.test(symbol))) {
       return true;
     }
     
+    // Misspelled major coin names (impersonators)
+    const misspelledMajorCoins = [
+      /etherium/i, // Misspelled Ethereum
+      /bitcoi(?!n)/i, // Misspelled Bitcoin (but not Bitcoin itself)
+      /rippl/i, // Misspelled Ripple
+      /cardano\s+clone/i,
+    ];
+    
+    if (misspelledMajorCoins.some(p => p.test(name))) {
+      return true;
+    }
+    
+    // Fake stablecoins (e.g. "XUSD" is a scam pretending to be USD)
+    if (name.includes('USD') || name.includes('USDT') || name.includes('USDC')) {
+      if (!['USDT', 'USDC', 'USDD', 'TUSD', 'BUSD', 'HUSD', 'KUSD'].includes(symbol)) {
+        // If it claims to be stablecoin but uses non-standard symbol, likely fake
+        if (tokenChainId === 1 || tokenChainId === 137) {
+          const marketCap = token.marketCap || 0;
+          if (marketCap < 100000) return true; // Suspiciously low for claiming stablecoin
+        }
+      }
+    }
+    
     // Suspiciously low market cap for major symbols
-    const majorSymbols = ['ETH', 'BTC', 'USDT', 'USDC', 'BNB', 'POL', 'SOL'];
+    const majorSymbols = ['ETH', 'BTC', 'USDT', 'USDC', 'BNB', 'POL', 'SOL', 'MATIC'];
     if (majorSymbols.includes(symbol)) {
       const marketCap = token.marketCap || 0;
       // If claiming to be a major coin but market cap < $1M, likely fake
@@ -78,6 +113,24 @@ export function TokenInput({
         const maxMarketCap = Math.max(...sameSymbolTokens.map(t => t.marketCap || 0));
         // If this token has much lower market cap than others with same symbol, it's likely fake
         if ((token.marketCap || 0) < maxMarketCap * 0.1) {
+          return true;
+        }
+      }
+    }
+    
+    // Tokens pretending to be major coins but with wrong symbol on wrong chain
+    const majorCoinNames = ['ETHEREUM', 'BITCOIN', 'RIPPLE', 'CARDANO'];
+    if (majorCoinNames.some(coin => name.includes(coin))) {
+      const correctSymbol = {
+        'ETHEREUM': 'ETH',
+        'BITCOIN': 'BTC',
+        'RIPPLE': 'XRP',
+        'CARDANO': 'ADA'
+      };
+      
+      // If name says it's Ethereum but symbol isn't ETH (on ETH chain) or WETH (on other chains), likely fake
+      for (const [coinName, correctSym] of Object.entries(correctSymbol)) {
+        if (name.includes(coinName) && !symbol.includes(correctSym) && symbol !== `W${correctSym}` && symbol !== 'WETH') {
           return true;
         }
       }
