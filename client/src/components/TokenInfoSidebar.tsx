@@ -32,78 +32,123 @@ function LoadingPulse({ width = 40, height = 12 }: { width?: number; height?: nu
   );
 }
 
+/**
+ * Advanced curve drawing algorithms for smooth sparklines
+ * Uses Catmull-Rom spline interpolation for natural curves
+ */
+
+// Catmull-Rom spline interpolation for smooth curves
+function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): number {
+  const a0 = -0.5 * p0 + 1.5 * p1 - 1.5 * p2 + 0.5 * p3;
+  const a1 = p0 - 2.5 * p1 + 2 * p2 - 0.5 * p3;
+  const a2 = -0.5 * p0 + 0.5 * p2;
+  const a3 = p1;
+  
+  return a0 * t * t * t + a1 * t * t + a2 * t + a3;
+}
+
+// Generate smooth curve points using Catmull-Rom interpolation
+function interpolateCurve(data: number[], samplesPerSegment: number = 8): number[] {
+  if (data.length < 2) return data;
+  if (data.length === 2) {
+    // Linear interpolation for 2 points
+    const result: number[] = [];
+    for (let i = 0; i < samplesPerSegment; i++) {
+      result.push(data[0] + (data[1] - data[0]) * (i / (samplesPerSegment - 1)));
+    }
+    return result;
+  }
+  
+  const result: number[] = [];
+  
+  // For Catmull-Rom, we need points before and after the segment
+  for (let i = 0; i < data.length - 1; i++) {
+    const p0 = i === 0 ? data[0] : data[i - 1];
+    const p1 = data[i];
+    const p2 = data[i + 1];
+    const p3 = i === data.length - 2 ? data[data.length - 1] : data[i + 2];
+    
+    for (let j = 0; j < samplesPerSegment; j++) {
+      const t = j / samplesPerSegment;
+      result.push(catmullRom(p0, p1, p2, p3, t));
+    }
+  }
+  
+  // Add final point
+  result.push(data[data.length - 1]);
+  return result;
+}
+
 // Professional sparkline with empathetic colors and movement-aware dots
 function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | 'down'; change?: number | null; isLoading?: boolean; priceHistory?: number[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  // Use actual price history from server (2-minute intervals, max 5 minutes = 3 points)
+  // Process price history: expecting 1-hour data with 5-minute intervals (12 points max)
   const sparklineData = useMemo(() => {
     if (priceHistory && priceHistory.length >= 2) {
-      // Use real historical price data (5-minute frame = last 2-3 points from 2-minute intervals)
-      const maxPoints = Math.min(priceHistory.length, 60); // Max 60 points for smooth rendering
-      return priceHistory.slice(-maxPoints);
+      // Use real historical price data: 1-hour frame with 5-minute movements
+      // Expected: array of up to 12 points (1 hour / 5 min = 12)
+      const maxPoints = Math.min(priceHistory.length, 12); // Max 12 for 1-hour 5-min intervals
+      const rawData = priceHistory.slice(-maxPoints);
+      
+      // Interpolate smoothly with Catmull-Rom spline (8 samples per segment)
+      return interpolateCurve(rawData, 8);
     }
     
-    // Fallback: Generate realistic price data with 60 points (good resolution for sparkline)
-    const points = 60;
-    const changePercent = change ?? (trend === 'up' ? 2.5 : -2.5);
-    const volatility = Math.abs(changePercent) * 0.2;
+    // Fallback: Generate realistic price data representing 1 hour of price movement
+    // 12 data points for 1-hour at 5-minute intervals
+    const intervals = 12;
+    const changePercent = change ?? (trend === 'up' ? 1.5 : -1.5);
+    const volatility = Math.abs(changePercent) * 0.3;
     
     const data: number[] = [];
     let currentPrice = 100;
     const targetPrice = 100 + changePercent;
-    const priceStep = (targetPrice - currentPrice) / points;
+    const priceStep = (targetPrice - currentPrice) / intervals;
     
-    for (let i = 0; i < points; i++) {
-      const progressRatio = i / points;
-      const noise = (Math.random() - 0.5) * volatility * (1 + Math.sin(progressRatio * Math.PI) * 0.5);
-      const trend_component = priceStep + noise;
-      const meanReversion = (currentPrice - (100 + priceStep * i)) * 0.05;
+    // Generate 12 price points simulating realistic market movement over 1 hour
+    for (let i = 0; i < intervals; i++) {
+      const progressRatio = i / intervals;
       
-      currentPrice = Math.max(currentPrice + trend_component - meanReversion, 50);
-      data.push(currentPrice);
+      // Ornstein-Uhlenbeck process for realistic price movement
+      const noise = (Math.random() - 0.5) * volatility;
+      const meanReversion = (currentPrice - (100 + priceStep * i)) * 0.08;
+      const trend_component = priceStep * (0.7 + Math.random() * 0.6);
+      
+      currentPrice = currentPrice + trend_component + noise - meanReversion;
+      data.push(Math.max(currentPrice, 50));
     }
     
-    // Apply smoothing for natural curve
-    const smoothed = data.map((val, i) => {
-      if (i === 0) return val;
-      if (i === data.length - 1) return val;
-      const window = i > 2 && i < data.length - 3 ? 5 : 3;
-      let sum = 0;
-      let count = 0;
-      for (let j = Math.max(0, i - Math.floor(window / 2)); j <= Math.min(data.length - 1, i + Math.floor(window / 2)); j++) {
-        sum += data[j];
-        count++;
-      }
-      return sum / count;
-    });
-    
-    return smoothed;
+    // Interpolate for smooth curve
+    return interpolateCurve(data, 8);
   }, [priceHistory, trend, change]);
 
-  // Calculate trend from actual price history data (not from 24h change)
+  // Calculate trend from actual price history data (1-hour range)
   const calculatedTrend = useMemo(() => {
-    if (sparklineData.length < 2) return trend;
-    const firstPrice = sparklineData[0];
-    const lastPrice = sparklineData[sparklineData.length - 1];
+    if (!priceHistory || priceHistory.length < 2) return trend;
+    const firstPrice = priceHistory[0];
+    const lastPrice = priceHistory[priceHistory.length - 1];
     // If prices are nearly identical (stablecoin), return neutral
     const volatilityPercent = Math.abs((lastPrice - firstPrice) / firstPrice) * 100;
     if (volatilityPercent < 0.1) return 'neutral'; // Less than 0.1% change = stablecoin
     return lastPrice > firstPrice ? 'up' : 'down';
-  }, [sparklineData, trend]);
+  }, [priceHistory, trend]);
 
-  // Calculate recent movement for dot color indicator
+  // Calculate recent 5-minute movement for dot indicator
   const recentMovement = useMemo(() => {
-    if (sparklineData.length < 2) return 'neutral';
-    const lastPrice = sparklineData[sparklineData.length - 1];
-    const prevPrice = sparklineData[Math.max(0, sparklineData.length - 2)];
-    const diff = Math.abs((lastPrice - prevPrice) / prevPrice);
-    // Only show movement if there's actual change > 0.01%
-    if (diff < 0.0001) return 'neutral';
-    if (lastPrice > prevPrice) return 'up';
-    if (lastPrice < prevPrice) return 'down';
+    if (!priceHistory || priceHistory.length < 2) return 'neutral';
+    // Last point is most recent (5-minute frame just completed)
+    // Compare with previous 5-minute interval
+    const lastPrice = priceHistory[priceHistory.length - 1];
+    const prevPrice = priceHistory[Math.max(0, priceHistory.length - 2)];
+    const diff = (lastPrice - prevPrice) / prevPrice;
+    
+    // Only show movement if there's actual change > 0.05% (more sensitive for 5-min frame)
+    if (Math.abs(diff) < 0.0005) return 'neutral';
+    if (diff > 0) return 'up';
+    if (diff < 0) return 'down';
     return 'neutral';
-  }, [sparklineData]);
+  }, [priceHistory]);
   
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -120,21 +165,26 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     ctx.clearRect(0, 0, 100, 36);
     
     const data = sparklineData;
+    if (data.length === 0) return;
+    
     const min = Math.min(...data);
     const max = Math.max(...data);
-    const range = max - min || 1;
+    const range = Math.max(max - min, 0.0001); // Prevent division by zero
     
     // Empathetic color scheme - softer, more sophisticated
-    // Uptrend: peaceful cyan/teal, Downtrend: gentle coral, Neutral: steady slate
     const lineColorUp = 'rgba(106, 230, 230, 0.85)'; // Peaceful cyan
     const lineColorDown = 'rgba(255, 140, 130, 0.85)'; // Gentle coral
-    const lineColorNeutral = 'rgba(148, 163, 184, 0.7)'; // Steady slate (for stablecoins)
+    const lineColorNeutral = 'rgba(148, 163, 184, 0.7)'; // Steady slate
     const glowColorUp = 'rgba(106, 230, 230, 0.25)';
     const glowColorDown = 'rgba(255, 140, 130, 0.25)';
     const glowColorNeutral = 'rgba(148, 163, 184, 0.15)';
     
     const lineColor = calculatedTrend === 'up' ? lineColorUp : calculatedTrend === 'down' ? lineColorDown : lineColorNeutral;
     const glowColor = calculatedTrend === 'up' ? glowColorUp : calculatedTrend === 'down' ? glowColorDown : glowColorNeutral;
+    
+    // Helper function to convert price to canvas Y coordinate
+    const priceToY = (price: number): number => 34 - ((price - min) / range) * 30;
+    const priceToX = (index: number): number => 2 + (index / Math.max(data.length - 1, 1)) * 96;
     
     // Draw gradient area under line with empathetic feel
     const gradient = ctx.createLinearGradient(0, 0, 0, 36);
@@ -144,64 +194,85 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     ctx.fillStyle = gradient;
     ctx.beginPath();
     ctx.moveTo(2, 34);
+    
+    // Use smooth interpolated curve for area fill
     for (let i = 0; i < data.length; i++) {
-      const x = 2 + (i / (data.length - 1)) * 96;
-      const y = 34 - ((data[i] - min) / range) * 30;
-      ctx.lineTo(x, y);
+      const x = priceToX(i);
+      const y = priceToY(data[i]);
+      if (i === 0) ctx.lineTo(x, y);
+      else ctx.lineTo(x, y);
     }
     ctx.lineTo(98, 34);
     ctx.closePath();
     ctx.fill();
     
-    // Draw main price line with calculated trend color
+    // Draw main price line with advanced rendering
     ctx.strokeStyle = lineColor;
-    ctx.lineWidth = 2.0;
+    ctx.lineWidth = 2.2; // Slightly thicker for better visibility
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     
+    // Enable image smoothing for better curve rendering
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
     ctx.beginPath();
-    for (let i = 0; i < data.length; i++) {
-      const x = 2 + (i / (data.length - 1)) * 96;
-      const y = 34 - ((data[i] - min) / range) * 30;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    ctx.moveTo(priceToX(0), priceToY(data[0]));
+    
+    // Draw smooth curve using the interpolated data (already smooth from Catmull-Rom)
+    for (let i = 1; i < data.length; i++) {
+      ctx.lineTo(priceToX(i), priceToY(data[i]));
     }
     ctx.stroke();
     
-    // Terminal dot with movement-aware color indicator
-    const lastX = 98;
-    const lastY = 34 - ((data[data.length - 1] - min) / range) * 30;
+    // Add subtle glow effect to the line (second pass with lower opacity, thicker)
+    ctx.strokeStyle = glowColor;
+    ctx.lineWidth = 4;
+    ctx.globalAlpha = 0.15;
+    ctx.beginPath();
+    ctx.moveTo(priceToX(0), priceToY(data[0]));
+    for (let i = 1; i < data.length; i++) {
+      ctx.lineTo(priceToX(i), priceToY(data[i]));
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
     
-    // Dot color shows recent movement direction (or neutral for stablecoins)
+    // Terminal dot with movement-aware color indicator (shows recent 5-min movement)
+    const lastX = priceToX(data.length - 1);
+    const lastY = priceToY(data[data.length - 1]);
+    
     let dotOuterColor: string;
     let dotInnerColor: string;
     
     if (recentMovement === 'up') {
-      // Recent movement up: success green
-      dotOuterColor = 'rgba(52, 211, 153, 0.4)';
-      dotInnerColor = 'rgba(16, 185, 129, 1)';
+      dotOuterColor = 'rgba(52, 211, 153, 0.4)'; // Green glow
+      dotInnerColor = 'rgba(16, 185, 129, 1)'; // Solid green
     } else if (recentMovement === 'down') {
-      // Recent movement down: caution orange-red
-      dotOuterColor = 'rgba(251, 146, 60, 0.4)';
-      dotInnerColor = 'rgba(249, 115, 22, 1)';
+      dotOuterColor = 'rgba(251, 146, 60, 0.4)'; // Orange glow
+      dotInnerColor = 'rgba(249, 115, 22, 1)'; // Solid orange
     } else {
-      // Neutral: use calculated trend or neutral color for stablecoins
       if (calculatedTrend === 'neutral') {
-        dotOuterColor = 'rgba(148, 163, 184, 0.3)';
-        dotInnerColor = 'rgba(107, 114, 128, 1)';
+        dotOuterColor = 'rgba(148, 163, 184, 0.3)'; // Slate glow
+        dotInnerColor = 'rgba(107, 114, 128, 1)'; // Solid slate
       } else {
         dotOuterColor = calculatedTrend === 'up' ? 'rgba(106, 230, 230, 0.4)' : 'rgba(255, 140, 130, 0.4)';
         dotInnerColor = calculatedTrend === 'up' ? 'rgba(106, 230, 230, 1)' : 'rgba(255, 140, 130, 1)';
       }
     }
     
-    // Outer glow - soft halo
+    // Draw outer glow circle
     ctx.fillStyle = dotOuterColor;
     ctx.beginPath();
     ctx.arc(lastX, lastY, 5.5, 0, Math.PI * 2);
     ctx.fill();
     
-    // Inner dot - solid indicator
+    // Draw middle ring for depth
+    ctx.fillStyle = dotOuterColor.replace('0.4', '0.25');
+    ctx.beginPath();
+    ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Draw solid indicator dot
     ctx.fillStyle = dotInnerColor;
     ctx.beginPath();
     ctx.arc(lastX, lastY, 2.8, 0, Math.PI * 2);
