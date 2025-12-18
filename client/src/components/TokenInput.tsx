@@ -57,24 +57,41 @@ export function TokenInput({
   };
 
   // Filter out FAKE/SCAM tokens by detecting suspicious characteristics
-  const isLikelyScam = (token: ExtendedToken & { currentPrice?: number; priceChange24h?: number; marketCap?: number }, allTokensInResults?: any[]) => {
+  // Only apply filtering for ticker searches, NOT for address searches
+  const isLikelyScam = (token: ExtendedToken & { currentPrice?: number; priceChange24h?: number; marketCap?: number }, allTokensInResults?: any[], isAddressSearch: boolean = false) => {
     const symbol = token.symbol.toUpperCase();
     const name = token.name.toUpperCase();
     const address = (token.address || '').toLowerCase();
     const chainId = token.chainId || 0;
     
-    // Check stablecoin whitelist first - ONLY allow whitelisted addresses
+    // Check stablecoin whitelist first - ONLY allow whitelisted addresses (ALWAYS apply)
     if (symbol === 'USDT' || symbol === 'USDC') {
       const chainWhitelist = STABLECOIN_WHITELIST[chainId as keyof typeof STABLECOIN_WHITELIST];
       if (chainWhitelist && chainWhitelist[symbol as 'USDT' | 'USDC']) {
         const whitelistedAddress = chainWhitelist[symbol as 'USDT' | 'USDC'].toLowerCase();
-        // Only allow if address matches whitelist
         if (address === whitelistedAddress) return false;
-        // Otherwise it's a fake stablecoin
         return true;
       }
-      // If not in supported chain, it's fake
       return true;
+    }
+    
+    // Skip additional filters if this is an address search
+    if (isAddressSearch) return false;
+    
+    // Filter SOLANA, BITCOIN, XRP - ONLY allow on Ethereum chain
+    if (['SOLANA', 'SOL', 'BITCOIN', 'BTC', 'XRP', 'RIPPLE'].includes(symbol)) {
+      if (chainId !== 1) return true; // Filter if not on Ethereum
+    }
+    
+    // Filter tokens with "ethereum" or "etherium" words (except wrapped/native)
+    const ethereumWords = /\b(ethereum|etherium)\b/i.test(name);
+    if (ethereumWords) {
+      // Allow only if it's wrapped ETH or native ETH on Ethereum
+      if (symbol === 'ETH' && chainId === 1) return false;
+      if (symbol === 'WETH' && chainId === 1) return false;
+      if (symbol === 'WETH' && chainId === 137) return false; // Wrapped ETH on Polygon is okay
+      // Otherwise filter it
+      if (symbol !== 'ETH' && symbol !== 'WETH') return true;
     }
     
     // Aggressive scam patterns - catches tricks like "USDTet", "ETHx", etc
@@ -87,10 +104,10 @@ export function TokenInput({
       /test\s+/i,
       /token\s+\d+/i,
       /\s+v\d+$/i,
-      /\bETH[A-Z0-9]/i, // ETH followed by letters (ETHx, ETHet, etc)
-      /\bBNB[A-Z0-9]/i, // BNB followed by letters
-      /\bUSDT[A-Z0-9]/i, // USDT followed by letters (USDTet, etc)
-      /\bUSDC[A-Z0-9]/i, // USDC followed by letters
+      /\bETH[A-Z0-9]/i,
+      /\bBNB[A-Z0-9]/i,
+      /\bUSDT[A-Z0-9]/i,
+      /\bUSDC[A-Z0-9]/i,
       /ethereum\s+clone/i,
       /fake\s+(eth|bnb|btc)/i,
     ];
@@ -99,11 +116,10 @@ export function TokenInput({
       return true;
     }
     
-    // Filter out fake major coins by low market cap (except if searched by address)
+    // Filter out fake major coins by low market cap
     const majorSymbols = ['ETH', 'BTC', 'BNB', 'SOL'];
     if (majorSymbols.includes(symbol)) {
       const marketCap = token.marketCap || 0;
-      // If claiming to be a major coin but market cap < $100M, likely fake
       if (marketCap < 100000000) return true;
     }
     
@@ -112,7 +128,6 @@ export function TokenInput({
       const sameSymbolTokens = allTokensInResults.filter(t => t.token?.symbol?.toUpperCase() === symbol);
       if (sameSymbolTokens.length > 1) {
         const maxMarketCap = Math.max(...sameSymbolTokens.map(t => t.marketCap || 0));
-        // If this token has much lower market cap than others with same symbol, it's likely fake
         if ((token.marketCap || 0) < maxMarketCap * 0.05) {
           return true;
         }
@@ -146,7 +161,7 @@ export function TokenInput({
           });
         });
       }
-      const filtered = allTokens.filter(item => !isLikelyScam(item.token, allTokens));
+      const filtered = allTokens.filter(item => !isLikelyScam(item.token, allTokens, false));
       setSuggestions(filtered.slice(0, 15));
       setShowSuggestions(true);
       return;
@@ -222,8 +237,8 @@ export function TokenInput({
         return true;
       });
       
-      // Apply scam filter
-      const filtered = deduplicated.filter(item => !isLikelyScam(item.token, deduplicated));
+      // Apply scam filter - skip filtering if address search (but always check stablecoin whitelist)
+      const filtered = deduplicated.filter(item => !isLikelyScam(item.token, deduplicated, isAddress(query)));
       
       setSuggestions(filtered.slice(0, 15));
       setShowSuggestions(true);
