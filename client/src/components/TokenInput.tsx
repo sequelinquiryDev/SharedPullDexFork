@@ -56,13 +56,13 @@ export function TokenInput({
     },
   };
 
-  // Filter out FAKE/SCAM tokens by price
+  // Filter out FAKE/SCAM tokens by market cap
   // Only apply filtering for ticker searches, NOT for address searches
   const isLikelyScam = (token: ExtendedToken & { currentPrice?: number; priceChange24h?: number; marketCap?: number }, allTokensInResults?: any[], isAddressSearch: boolean = false) => {
     const symbol = token.symbol.toUpperCase();
     const address = (token.address || '').toLowerCase();
     const chainId = token.chainId || 0;
-    const price = token.currentPrice || 0;
+    const marketCap = token.marketCap || 0;
     
     // Whitelist of real native tokens - always allow these
     const realNativeTokens = ['ETH', 'WETH', 'USDT', 'USDC', 'DAI', 'USDE', 'MATIC', 'POL', 'WBTC', 'WMATIC'];
@@ -83,8 +83,11 @@ export function TokenInput({
     // Skip additional filters if this is an address search
     if (isAddressSearch) return false;
     
-    // Filter tokens with price > 300 (likely fake/spam)
-    if (price > 300) return true;
+    // Filter tokens with market cap < 1 million (likely fake/spam/scam)
+    if (marketCap > 0 && marketCap < 1000000) return true;
+    
+    // Filter tokens with NO market cap data (suspicious)
+    if (!marketCap || marketCap === 0) return true;
     
     return false;
   };
