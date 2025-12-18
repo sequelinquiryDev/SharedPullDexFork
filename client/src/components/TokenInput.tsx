@@ -42,45 +42,12 @@ export function TokenInput({
   const lastSelectedAddressRef = useRef<string>('');
   const firstClickRef = useRef<boolean>(true);
 
-  // Known real contract addresses for major coins (prevents filtering legitimate tokens)
-  const KNOWN_REAL_ADDRESSES: Record<string, Set<string>> = {
-    // Ethereum mainnet addresses (lowercase)
-    '1': new Set([
-      '0x0000000000000000000000000000000000000000'.toLowerCase(), // ETH native
-      '0xdac17f958d2ee523a2206206994597c13d831ec7'.toLowerCase(), // USDT
-      '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48'.toLowerCase(), // USDC
-      '0x2260fac5e5542a773aa44fbcff022c5ad373b90d'.toLowerCase(), // WBTC
-      '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2'.toLowerCase(), // WETH
-      '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0'.toLowerCase(), // POL (Polygon token on ETH)
-      '0x6b175474e89094c44da98b954eedeac495271d0f'.toLowerCase(), // DAI
-      '0x514910771af9ca656af840dff83e8264ecf986ca'.toLowerCase(), // LINK
-    ]),
-    // Polygon mainnet addresses (lowercase)
-    '137': new Set([
-      '0x0000000000000000000000000000000000001010'.toLowerCase(), // MATIC native
-      '0xc2132d05d31c914a87c6611c10748aeb04b58e8f'.toLowerCase(), // USDT
-      '0x2791bca1f2de4661ed88a30c99a7a9449aa84174'.toLowerCase(), // USDC
-      '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619'.toLowerCase(), // WETH
-      '0x1bfd67037b42cf73acf2047067bd4303cbd5e4da'.toLowerCase(), // WBTC
-      '0x8f3cf7ad23cd3cadbd9735aff958023d60c2405b'.toLowerCase(), // DAI
-      '0x53e0bca35ec356bd5dddfebf6da167dfc6e4caf0'.toLowerCase(), // LINK
-    ]),
-  };
-
   // Filter out FAKE/SCAM tokens by detecting suspicious characteristics
   const isLikelyScam = (token: ExtendedToken & { currentPrice?: number; priceChange24h?: number; marketCap?: number }, allTokensInResults?: any[]) => {
     const symbol = token.symbol.toUpperCase();
     const name = token.name.toUpperCase();
-    const tokenChainId = token.chainId || 0;
-    const tokenAddress = token.address?.toLowerCase() || '';
     
-    // Check if this is a known real token by contract address
-    const knownAddressesForChain = KNOWN_REAL_ADDRESSES[tokenChainId.toString()];
-    if (knownAddressesForChain?.has(tokenAddress)) {
-      return false; // It's a real token, don't filter it
-    }
-    
-    // Obvious scam patterns in name
+    // Obvious scam patterns
     const scamPatterns = [
       /fake\s+/i,
       /clone\s+/i,
@@ -89,16 +56,22 @@ export function TokenInput({
       /pump\s+/i,
       /test\s+/i,
       /token\s+\d+/i,
-      /\s+v\d+\s*$/i, // "ETH v2", "USDT v3" etc - likely clones
-      /copy\s+of/i,
-      /knock\s+off/i,
+      /\s+v\d+$/i, // "ETH v2", "USDT v3" etc - likely clones
     ];
     
     if (scamPatterns.some(p => p.test(name) || p.test(symbol))) {
       return true;
     }
     
-    // If there are multiple tokens with same symbol, keep the one with highest market cap (likely real), filter lower ones
+    // Suspiciously low market cap for major symbols
+    const majorSymbols = ['ETH', 'BTC', 'USDT', 'USDC', 'BNB', 'POL', 'SOL'];
+    if (majorSymbols.includes(symbol)) {
+      const marketCap = token.marketCap || 0;
+      // If claiming to be a major coin but market cap < $1M, likely fake
+      if (marketCap < 1000000) return true;
+    }
+    
+    // If there are multiple tokens with same symbol, filter lower market cap ones (likely fakes)
     if (allTokensInResults) {
       const sameSymbolTokens = allTokensInResults.filter(t => t.token?.symbol?.toUpperCase() === symbol);
       if (sameSymbolTokens.length > 1) {
