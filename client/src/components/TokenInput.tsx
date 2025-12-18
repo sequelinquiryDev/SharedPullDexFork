@@ -40,6 +40,7 @@ export function TokenInput({
   const containerRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSelectedAddressRef = useRef<string>('');
+  const firstFocusRef = useRef<boolean>(true);
 
   const handleSearch = useCallback(async (query: string) => {
     // BRG mode: search both chains; otherwise single chain
@@ -158,27 +159,19 @@ export function TokenInput({
     searchTimeoutRef.current = setTimeout(() => {
       handleSearch(value.trim().toLowerCase());
     }, 150);
-    
-    // Move cursor to end when typing
-    setTimeout(() => {
-      if (inputRef.current && value) {
-        inputRef.current.setSelectionRange(value.length, value.length);
-      }
-    }, 0);
   };
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    // Move cursor to end of input immediately
-    e.target.setSelectionRange(e.target.value.length, e.target.value.length);
+    // Move cursor to end only on first focus
+    if (firstFocusRef.current) {
+      e.target.setSelectionRange(e.target.value.length, e.target.value.length);
+      firstFocusRef.current = false;
+    }
     handleSearch(searchQuery.trim().toLowerCase());
   };
 
-  const handleInputClick = (e: React.MouseEvent<HTMLInputElement>) => {
-    // Ensure cursor is at end on first click
-    const target = e.currentTarget;
-    setTimeout(() => {
-      target.setSelectionRange(target.value.length, target.value.length);
-    }, 0);
+  const handleInputClick = () => {
+    // Click behavior - cursor handled by browser default
   };
 
   const handleBlur = () => {
