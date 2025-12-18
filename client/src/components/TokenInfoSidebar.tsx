@@ -40,7 +40,6 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
   const sparklineData = useMemo(() => {
     if (priceHistory && priceHistory.length >= 2) {
       // Use real historical price data (5-minute frame = last 2-3 points from 2-minute intervals)
-      // But keep at least the last 3 points for smooth curve even if older
       const maxPoints = Math.min(priceHistory.length, 60); // Max 60 points for smooth rendering
       return priceHistory.slice(-maxPoints);
     }
@@ -82,11 +81,25 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     return smoothed;
   }, [priceHistory, trend, change]);
 
+  // Calculate trend from actual price history data (not from 24h change)
+  const calculatedTrend = useMemo(() => {
+    if (sparklineData.length < 2) return trend;
+    const firstPrice = sparklineData[0];
+    const lastPrice = sparklineData[sparklineData.length - 1];
+    // If prices are nearly identical (stablecoin), return neutral
+    const volatilityPercent = Math.abs((lastPrice - firstPrice) / firstPrice) * 100;
+    if (volatilityPercent < 0.1) return 'neutral'; // Less than 0.1% change = stablecoin
+    return lastPrice > firstPrice ? 'up' : 'down';
+  }, [sparklineData, trend]);
+
   // Calculate recent movement for dot color indicator
   const recentMovement = useMemo(() => {
     if (sparklineData.length < 2) return 'neutral';
     const lastPrice = sparklineData[sparklineData.length - 1];
     const prevPrice = sparklineData[Math.max(0, sparklineData.length - 2)];
+    const diff = Math.abs((lastPrice - prevPrice) / prevPrice);
+    // Only show movement if there's actual change > 0.01%
+    if (diff < 0.0001) return 'neutral';
     if (lastPrice > prevPrice) return 'up';
     if (lastPrice < prevPrice) return 'down';
     return 'neutral';
@@ -112,17 +125,21 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     const range = max - min || 1;
     
     // Empathetic color scheme - softer, more sophisticated
-    // Uptrend: peaceful cyan/teal gradient
-    // Downtrend: gentle coral/peach gradient
+    // Uptrend: peaceful cyan/teal, Downtrend: gentle coral, Neutral: steady slate
     const lineColorUp = 'rgba(106, 230, 230, 0.85)'; // Peaceful cyan
     const lineColorDown = 'rgba(255, 140, 130, 0.85)'; // Gentle coral
-    const glowColorUp = 'rgba(106, 230, 230, 0.25)'; // Light cyan glow
-    const glowColorDown = 'rgba(255, 140, 130, 0.25)'; // Light coral glow
+    const lineColorNeutral = 'rgba(148, 163, 184, 0.7)'; // Steady slate (for stablecoins)
+    const glowColorUp = 'rgba(106, 230, 230, 0.25)';
+    const glowColorDown = 'rgba(255, 140, 130, 0.25)';
+    const glowColorNeutral = 'rgba(148, 163, 184, 0.15)';
+    
+    const lineColor = calculatedTrend === 'up' ? lineColorUp : calculatedTrend === 'down' ? lineColorDown : lineColorNeutral;
+    const glowColor = calculatedTrend === 'up' ? glowColorUp : calculatedTrend === 'down' ? glowColorDown : glowColorNeutral;
     
     // Draw gradient area under line with empathetic feel
     const gradient = ctx.createLinearGradient(0, 0, 0, 36);
-    gradient.addColorStop(0, trend === 'up' ? glowColorUp : glowColorDown);
-    gradient.addColorStop(1, trend === 'up' ? 'rgba(106, 230, 230, 0.02)' : 'rgba(255, 140, 130, 0.02)');
+    gradient.addColorStop(0, glowColor);
+    gradient.addColorStop(1, glowColor.replace('0.25', '0.02').replace('0.15', '0.01'));
     
     ctx.fillStyle = gradient;
     ctx.beginPath();
@@ -136,8 +153,8 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     ctx.closePath();
     ctx.fill();
     
-    // Draw main price line with empathetic color
-    ctx.strokeStyle = trend === 'up' ? lineColorUp : lineColorDown;
+    // Draw main price line with calculated trend color
+    ctx.strokeStyle = lineColor;
     ctx.lineWidth = 2.0;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -155,7 +172,7 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     const lastX = 98;
     const lastY = 34 - ((data[data.length - 1] - min) / range) * 30;
     
-    // Dot color shows recent movement direction (not just overall trend)
+    // Dot color shows recent movement direction (or neutral for stablecoins)
     let dotOuterColor: string;
     let dotInnerColor: string;
     
@@ -168,9 +185,14 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
       dotOuterColor = 'rgba(251, 146, 60, 0.4)';
       dotInnerColor = 'rgba(249, 115, 22, 1)';
     } else {
-      // Neutral: use trend color
-      dotOuterColor = trend === 'up' ? 'rgba(106, 230, 230, 0.4)' : 'rgba(255, 140, 130, 0.4)';
-      dotInnerColor = trend === 'up' ? 'rgba(106, 230, 230, 1)' : 'rgba(255, 140, 130, 1)';
+      // Neutral: use calculated trend or neutral color for stablecoins
+      if (calculatedTrend === 'neutral') {
+        dotOuterColor = 'rgba(148, 163, 184, 0.3)';
+        dotInnerColor = 'rgba(107, 114, 128, 1)';
+      } else {
+        dotOuterColor = calculatedTrend === 'up' ? 'rgba(106, 230, 230, 0.4)' : 'rgba(255, 140, 130, 0.4)';
+        dotInnerColor = calculatedTrend === 'up' ? 'rgba(106, 230, 230, 1)' : 'rgba(255, 140, 130, 1)';
+      }
     }
     
     // Outer glow - soft halo
@@ -184,7 +206,7 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     ctx.beginPath();
     ctx.arc(lastX, lastY, 2.8, 0, Math.PI * 2);
     ctx.fill();
-  }, [trend, sparklineData, isLoading, recentMovement]);
+  }, [calculatedTrend, sparklineData, isLoading, recentMovement]);
   
   if (isLoading) {
     return <LoadingPulse width={100} height={36} />;
