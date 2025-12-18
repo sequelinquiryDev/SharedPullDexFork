@@ -32,19 +32,21 @@ function LoadingPulse({ width = 40, height = 12 }: { width?: number; height?: nu
   );
 }
 
-// Professional sparkline that follows actual 2-minute price history from server
+// Professional sparkline with empathetic colors and movement-aware dots
 function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | 'down'; change?: number | null; isLoading?: boolean; priceHistory?: number[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  // Use actual price history from server (2-minute intervals), or generate synthetic data if unavailable
+  // Use actual price history from server (2-minute intervals, max 5 minutes = 3 points)
   const sparklineData = useMemo(() => {
-    if (priceHistory && priceHistory.length >= 3) {
-      // Use real historical price data from server (follows 2-minute sequence)
-      return priceHistory;
+    if (priceHistory && priceHistory.length >= 2) {
+      // Use real historical price data (5-minute frame = last 2-3 points from 2-minute intervals)
+      // But keep at least the last 3 points for smooth curve even if older
+      const maxPoints = Math.min(priceHistory.length, 60); // Max 60 points for smooth rendering
+      return priceHistory.slice(-maxPoints);
     }
     
     // Fallback: Generate realistic price data with 60 points (good resolution for sparkline)
-    const points = 60; // More granular data for better line visibility
+    const points = 60;
     const changePercent = change ?? (trend === 'up' ? 2.5 : -2.5);
     const volatility = Math.abs(changePercent) * 0.2;
     
@@ -59,15 +61,15 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
       const trend_component = priceStep + noise;
       const meanReversion = (currentPrice - (100 + priceStep * i)) * 0.05;
       
-      currentPrice = Math.max(currentPrice + trend_component - meanReversion, 50); // Keep price positive
+      currentPrice = Math.max(currentPrice + trend_component - meanReversion, 50);
       data.push(currentPrice);
     }
     
-    // Apply smoothing filter for natural curve
+    // Apply smoothing for natural curve
     const smoothed = data.map((val, i) => {
       if (i === 0) return val;
       if (i === data.length - 1) return val;
-      const window = i > 2 && i < data.length - 3 ? 5 : 3; // Larger smoothing window in middle
+      const window = i > 2 && i < data.length - 3 ? 5 : 3;
       let sum = 0;
       let count = 0;
       for (let j = Math.max(0, i - Math.floor(window / 2)); j <= Math.min(data.length - 1, i + Math.floor(window / 2)); j++) {
@@ -79,6 +81,16 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     
     return smoothed;
   }, [priceHistory, trend, change]);
+
+  // Calculate recent movement for dot color indicator
+  const recentMovement = useMemo(() => {
+    if (sparklineData.length < 2) return 'neutral';
+    const lastPrice = sparklineData[sparklineData.length - 1];
+    const prevPrice = sparklineData[Math.max(0, sparklineData.length - 2)];
+    if (lastPrice > prevPrice) return 'up';
+    if (lastPrice < prevPrice) return 'down';
+    return 'neutral';
+  }, [sparklineData]);
   
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -99,10 +111,18 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     const max = Math.max(...data);
     const range = max - min || 1;
     
-    // Draw gradient area under line
+    // Empathetic color scheme - softer, more sophisticated
+    // Uptrend: peaceful cyan/teal gradient
+    // Downtrend: gentle coral/peach gradient
+    const lineColorUp = 'rgba(106, 230, 230, 0.85)'; // Peaceful cyan
+    const lineColorDown = 'rgba(255, 140, 130, 0.85)'; // Gentle coral
+    const glowColorUp = 'rgba(106, 230, 230, 0.25)'; // Light cyan glow
+    const glowColorDown = 'rgba(255, 140, 130, 0.25)'; // Light coral glow
+    
+    // Draw gradient area under line with empathetic feel
     const gradient = ctx.createLinearGradient(0, 0, 0, 36);
-    gradient.addColorStop(0, trend === 'up' ? 'rgba(92,234,212,0.25)' : 'rgba(220,100,150,0.25)');
-    gradient.addColorStop(1, trend === 'up' ? 'rgba(92,234,212,0.02)' : 'rgba(220,100,150,0.02)');
+    gradient.addColorStop(0, trend === 'up' ? glowColorUp : glowColorDown);
+    gradient.addColorStop(1, trend === 'up' ? 'rgba(106, 230, 230, 0.02)' : 'rgba(255, 140, 130, 0.02)');
     
     ctx.fillStyle = gradient;
     ctx.beginPath();
@@ -116,9 +136,9 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     ctx.closePath();
     ctx.fill();
     
-    // Draw main price line
-    ctx.strokeStyle = trend === 'up' ? 'rgba(92,234,212,0.9)' : 'rgba(220,100,150,0.9)';
-    ctx.lineWidth = 1.8;
+    // Draw main price line with empathetic color
+    ctx.strokeStyle = trend === 'up' ? lineColorUp : lineColorDown;
+    ctx.lineWidth = 2.0;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     
@@ -131,22 +151,40 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
     }
     ctx.stroke();
     
-    // Terminal dot with glow
+    // Terminal dot with movement-aware color indicator
     const lastX = 98;
     const lastY = 34 - ((data[data.length - 1] - min) / range) * 30;
     
-    // Outer glow
-    ctx.fillStyle = trend === 'up' ? 'rgba(76, 224, 193, 0.3)' : 'rgba(255, 100, 130, 0.3)';
+    // Dot color shows recent movement direction (not just overall trend)
+    let dotOuterColor: string;
+    let dotInnerColor: string;
+    
+    if (recentMovement === 'up') {
+      // Recent movement up: success green
+      dotOuterColor = 'rgba(52, 211, 153, 0.4)';
+      dotInnerColor = 'rgba(16, 185, 129, 1)';
+    } else if (recentMovement === 'down') {
+      // Recent movement down: caution orange-red
+      dotOuterColor = 'rgba(251, 146, 60, 0.4)';
+      dotInnerColor = 'rgba(249, 115, 22, 1)';
+    } else {
+      // Neutral: use trend color
+      dotOuterColor = trend === 'up' ? 'rgba(106, 230, 230, 0.4)' : 'rgba(255, 140, 130, 0.4)';
+      dotInnerColor = trend === 'up' ? 'rgba(106, 230, 230, 1)' : 'rgba(255, 140, 130, 1)';
+    }
+    
+    // Outer glow - soft halo
+    ctx.fillStyle = dotOuterColor;
     ctx.beginPath();
-    ctx.arc(lastX, lastY, 5, 0, Math.PI * 2);
+    ctx.arc(lastX, lastY, 5.5, 0, Math.PI * 2);
     ctx.fill();
     
-    // Inner dot
-    ctx.fillStyle = trend === 'up' ? 'rgba(76, 224, 193, 1)' : 'rgba(255, 100, 130, 1)';
+    // Inner dot - solid indicator
+    ctx.fillStyle = dotInnerColor;
     ctx.beginPath();
-    ctx.arc(lastX, lastY, 2.5, 0, Math.PI * 2);
+    ctx.arc(lastX, lastY, 2.8, 0, Math.PI * 2);
     ctx.fill();
-  }, [trend, sparklineData, isLoading]);
+  }, [trend, sparklineData, isLoading, recentMovement]);
   
   if (isLoading) {
     return <LoadingPulse width={100} height={36} />;
