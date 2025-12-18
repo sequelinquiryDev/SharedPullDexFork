@@ -213,17 +213,14 @@ export function TokenInput({
         }
       }
 
-      // Sort by market cap first, then by 24h volume
-      allResults.sort((a, b) => {
-        const capA = b.marketCap || 0;
-        const capB = a.marketCap || 0;
-        if (capA !== capB) return capA - capB;
-        
-        // Secondary sort: 24h volume (descending)
+      // Sort: Top 5 by market cap, rest by 24h volume
+      const top5 = allResults.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0)).slice(0, 5);
+      const rest = allResults.slice(5).sort((a, b) => {
         const volA = (a.stats?.volume24h || 0) * (a.stats?.price || 1);
         const volB = (b.stats?.volume24h || 0) * (b.stats?.price || 1);
         return volB - volA;
       });
+      allResults = [...top5, ...rest];
       
       // Deduplicate: In non-BRG mode, keep one per symbol. In BRG mode, allow same symbol if different chains
       const seen = new Map<string, number>();

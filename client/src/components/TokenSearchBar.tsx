@@ -106,8 +106,14 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
         }
       }
 
-      allResults.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0));
-      setSuggestions(allResults.slice(0, 15));
+      // Sort: Top 5 by market cap, rest by 24h volume
+      const top5 = allResults.sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0)).slice(0, 5);
+      const rest = allResults.slice(5).sort((a, b) => {
+        const volA = (a.stats?.volume24h || 0) * (a.stats?.price || 1);
+        const volB = (b.stats?.volume24h || 0) * (b.stats?.price || 1);
+        return volB - volA;
+      });
+      setSuggestions([...top5, ...rest].slice(0, 15));
       setShowSuggestions(true);
     } finally {
       setLoading(false);
