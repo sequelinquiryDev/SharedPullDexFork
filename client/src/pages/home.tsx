@@ -6,7 +6,7 @@ import { TokenInput } from '@/components/TokenInput';
 import { SlippageControl } from '@/components/SlippageControl';
 import { TokenInfoSidebar } from '@/components/TokenInfoSidebar';
 import { showToast } from '@/components/Toast';
-import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress, getCgStatsMap, getStatsByTokenAddress, getHistoricalPriceData } from '@/lib/tokenService';
+import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress, getCgStatsMap, getStatsByTokenAddress, getHistoricalPriceData, clearPriceCache } from '@/lib/tokenService';
 import { getBestQuote, getLifiBridgeQuote, executeSwap, approveToken, checkAllowance, parseSwapError, QuoteResult } from '@/lib/swapService';
 import { config, ethereumConfig, low, isAddress } from '@/lib/config';
 import { useChain, ChainType, chainConfigs } from '@/lib/chainContext';
@@ -385,7 +385,8 @@ export default function Home() {
         if (enteringBrgMode) {
           // BRG mode: keep token selections, amounts, and quotes
           setQuote(null);
-          console.log(`[ChainSwitch] Entered BRG mode, preserving token selections and inputs`);
+          clearPriceCache();
+          console.log(`[ChainSwitch] Entered BRG mode, clearing price cache`);
         } else if (leavingBrgMode) {
           // Leaving BRG mode: reset all and load defaults for new chain
           setFromAmount('');
@@ -400,6 +401,7 @@ export default function Home() {
           setToPriceHistory([]);
           setFromToken(null);
           setToToken(null);
+          clearPriceCache();
           
           setDefaultTokensForChain(newChain).then(() => {
             console.log(`[ChainSwitch] Default tokens loaded for ${newChain}`);
@@ -418,6 +420,7 @@ export default function Home() {
           setToPriceHistory([]);
           setFromToken(null);
           setToToken(null);
+          clearPriceCache();
           
           setDefaultTokensForChain(newChain).then(() => {
             console.log(`[ChainSwitch] Default tokens loaded for ${newChain}`);
