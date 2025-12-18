@@ -83,11 +83,9 @@ export function TokenInput({
     // Skip additional filters if this is an address search
     if (isAddressSearch) return false;
     
-    // Filter tokens with market cap < 1 million (likely fake/spam/scam)
-    if (marketCap > 0 && marketCap < 1000000) return true;
-    
-    // Filter tokens with NO market cap data (suspicious)
-    if (!marketCap || marketCap === 0) return true;
+    // Filter tokens with BOTH market cap > 1B AND price > 600 (fake inflated tokens)
+    const price = token.currentPrice || 0;
+    if (marketCap > 1000000000 && price > 600) return true;
     
     return false;
   };
