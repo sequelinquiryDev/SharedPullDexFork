@@ -604,27 +604,55 @@ export default function Home() {
     setIsSwapping(true);
     setSwapStep('Preparing transaction...');
 
-    const currentChainId = chain === 'ETH' ? 1 : 137;
-    const currentConfig = chain === 'ETH' ? ethereumConfig : config;
-
     try {
       const amountWei = ethers.utils.parseUnits(fromAmount, fromToken.decimals);
+      
+      // Determine actual chain IDs from tokens
+      const fromChainId = getTokenChainId(fromToken);
+      const toChainId = getTokenChainId(toToken);
+      const isBridge = chain === 'BRG' && fromChainId !== toChainId;
+      
+      // Determine effective chain for same-chain swaps
+      const effectiveChain = chain === 'BRG' 
+        ? (fromChainId === 1 ? 'ETH' : 'POL')
+        : chain;
+      
+      console.log(`[Swap] Starting: ${fromAmount} ${fromToken.symbol} -> ${toToken.symbol} | Mode: ${chain} | FromChain: ${fromChainId} | ToChain: ${toChainId} | IsBridge: ${isBridge}`);
 
-      setSwapStep('Finding best price via 0x...');
-      showToast('Finding best swap route...', { type: 'info', ttl: 2000 });
-      
-      console.log(`[Swap] Starting swap: ${fromAmount} ${fromToken.symbol} -> ${toToken.symbol} on ${chain}`);
-      
-      const bestQuote = await getBestQuote(
-        fromToken.address,
-        toToken.address,
-        amountWei.toString(),
-        fromToken.decimals,
-        toToken.decimals,
-        slippage,
-        address || '0x0000000000000000000000000000000000000000',
-        chain
-      );
+      let bestQuote: QuoteResult | null = null;
+
+      if (isBridge) {
+        // Cross-chain bridge via LIFI
+        setSwapStep('Finding bridge route via LIFI...');
+        showToast('Finding best bridge route...', { type: 'info', ttl: 2000 });
+        console.log(`[Swap] Bridge mode: ${fromChainId} -> ${toChainId}`);
+        
+        bestQuote = await getLifiBridgeQuote(
+          fromToken.address,
+          toToken.address,
+          amountWei.toString(),
+          toToken.decimals,
+          fromChainId,
+          toChainId,
+          address || '0x0000000000000000000000000000000000000000'
+        );
+      } else {
+        // Same-chain swap: compare 0x + LIFI
+        setSwapStep('Finding best price...');
+        showToast('Finding best swap route...', { type: 'info', ttl: 2000 });
+        console.log(`[Swap] Same-chain swap on ${effectiveChain}`);
+        
+        bestQuote = await getBestQuote(
+          fromToken.address,
+          toToken.address,
+          amountWei.toString(),
+          fromToken.decimals,
+          toToken.decimals,
+          slippage,
+          address || '0x0000000000000000000000000000000000000000',
+          effectiveChain
+        );
+      }
 
       if (!bestQuote) {
         showToast('No liquidity available for this pair. Try a different token or smaller amount.', { type: 'error', ttl: 5000 });
@@ -646,7 +674,7 @@ export default function Home() {
       // Check if token needs approval (not native token)
       if (!isNativeToken(fromToken.address)) {
         setSwapStep('Checking token approval...');
-        const spender = bestQuote.data?.to || (chain === 'ETH' ? ethereumConfig.zeroXBase : config.zeroXBase);
+        const spender = bestQuote.data?.to || (effectiveChain === 'ETH' ? ethereumConfig.zeroXBase : config.zeroXBase);
         const allowance = await checkAllowance(provider, fromToken.address, address, spender);
 
         if (allowance.lt(amountWei)) {
@@ -657,8 +685,8 @@ export default function Home() {
         }
       }
 
-      setSwapStep(`Executing swap via ${bestQuote.source}...`);
-      showToast(`Confirm the swap in your wallet...`, { type: 'info', ttl: 5000 });
+      setSwapStep(`Executing ${isBridge ? 'bridge' : 'swap'} via ${bestQuote.source}...`);
+      showToast(`Confirm the ${isBridge ? 'bridge' : 'swap'} in your wallet...`, { type: 'info', ttl: 5000 });
       
       const tx = await executeSwap(
         signer,
@@ -668,7 +696,7 @@ export default function Home() {
         amountWei.toString(),
         fromToken.decimals,
         slippage,
-        chain
+        effectiveChain
       );
 
       if (tx) {
@@ -677,8 +705,8 @@ export default function Home() {
         
         const receipt = await tx.wait();
         
-        const explorerUrl = chain === 'ETH' ? ethereumConfig.explorerUrl : config.explorerUrl;
-        showToast(`Swap successful! ${fromAmount} ${fromToken.symbol} → ${toToken.symbol}`, { type: 'success', ttl: 8000 });
+        const explorerUrl = effectiveChain === 'ETH' ? ethereumConfig.explorerUrl : config.explorerUrl;
+        showToast(`${isBridge ? 'Bridge' : 'Swap'} successful! ${fromAmount} ${fromToken.symbol} → ${toToken.symbol}`, { type: 'success', ttl: 8000 });
         
         setFromAmount('');
         setToAmount('');
