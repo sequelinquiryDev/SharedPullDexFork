@@ -164,30 +164,65 @@ async function fetchMarketData(): Promise<Map<string, TokenStats>> {
   return statsMap;
 }
 
-export async function loadTokensForChain(chainId: number): Promise<void> {
-  const network = chainIdToCoingeckoNetwork[chainId] || 'polygon-pos';
-  const chainConfig = getChainConfigForId(chainId);
-  
-  let tokenList: Token[] = [];
-  const tokenMap = new Map<string, Token>();
-  
+// Load tokens from self-hosted JSON files (PRIMARY SOURCE)
+async function loadTokensFromSelfHosted(chainId: number): Promise<Token[] | null> {
   try {
-    const [cgResponse, uniResponse] = await Promise.all([
-      fetch(`https://tokens.coingecko.com/${network}/all.json`),
-      fetch('https://tokens.uniswap.org/').catch(() => null),
-    ]);
-
-    const cgData = await cgResponse.json();
+    const filename = chainId === 1 ? 'eth-tokens.json' : 'polygon-tokens.json';
+    const response = await fetchWithTimeout(`/${filename}`, {}, 5000);
     
-    tokenList = ((cgData.tokens || []) as any[]).map((t: any) => ({
-      address: low(t.address),
+    if (!response.ok) {
+      console.log(`Self-hosted ${filename} not found (${response.status}), will use fallback`);
+      return null;
+    }
+    
+    const data = await response.json();
+    const tokens = (data.tokens || []) as any[];
+    
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      console.warn(`Self-hosted ${filename} has invalid or empty tokens array`);
+      return null;
+    }
+    
+    const tokenList: Token[] = tokens.map((t: any) => ({
+      address: low(t.address || ''),
       symbol: t.symbol || '',
       name: t.name || '',
       decimals: t.decimals || 18,
-      logoURI: t.logoURI || t.logo || '',
-    }));
+      logoURI: t.logoURI || '',
+    })).filter(t => t.address);
+    
+    console.log(`✓ Loaded ${tokenList.length} tokens from self-hosted ${filename}`);
+    return tokenList;
+  } catch (e) {
+    console.warn(`Failed to load self-hosted tokens for chain ${chainId}:`, e);
+    return null;
+  }
+}
 
-    if (uniResponse) {
+// Fallback to external APIs (CoinGecko, Uniswap)
+async function loadTokensFromExternalAPIs(chainId: number): Promise<Token[]> {
+  const network = chainIdToCoingeckoNetwork[chainId] || 'polygon-pos';
+  let tokenList: Token[] = [];
+  
+  try {
+    const [cgResponse, uniResponse] = await Promise.all([
+      fetch(`https://tokens.coingecko.com/${network}/all.json`).catch(() => null),
+      fetch('https://tokens.uniswap.org/').catch(() => null),
+    ]);
+
+    if (cgResponse && cgResponse.ok) {
+      const cgData = await cgResponse.json();
+      tokenList = ((cgData.tokens || []) as any[]).map((t: any) => ({
+        address: low(t.address),
+        symbol: t.symbol || '',
+        name: t.name || '',
+        decimals: t.decimals || 18,
+        logoURI: t.logoURI || t.logo || '',
+      }));
+      console.log(`Loaded ${tokenList.length} tokens from CoinGecko (fallback)`);
+    }
+
+    if (uniResponse && uniResponse.ok) {
       const uniData = await uniResponse.json().catch(() => null);
       if (uniData && uniData.tokens) {
         const uniTokens = ((uniData.tokens || []) as any[])
@@ -206,7 +241,31 @@ export async function loadTokensForChain(chainId: number): Promise<void> {
             tokenList.push(t);
           }
         });
+        console.log(`Added ${uniTokens.length - (tokenList.length - uniTokens.length)} tokens from Uniswap (fallback)`);
       }
+    }
+  } catch (e) {
+    console.error(`External API fallback failed for chain ${chainId}:`, e);
+  }
+  
+  return tokenList;
+}
+
+export async function loadTokensForChain(chainId: number): Promise<void> {
+  const chainConfig = getChainConfigForId(chainId);
+  
+  let tokenList: Token[] = [];
+  const tokenMap = new Map<string, Token>();
+  
+  try {
+    // PRIMARY: Try self-hosted JSON first
+    console.log(`Loading tokens for chain ${chainId}...`);
+    tokenList = await loadTokensFromSelfHosted(chainId) || [];
+    
+    // FALLBACK: If self-hosted fails, use external APIs
+    if (tokenList.length === 0) {
+      console.log(`Self-hosted source unavailable, using external APIs as fallback...`);
+      tokenList = await loadTokensFromExternalAPIs(chainId);
     }
 
     tokenList.forEach((t) => tokenMap.set(t.address, t));
@@ -224,8 +283,6 @@ export async function loadTokensForChain(chainId: number): Promise<void> {
         logoURI: '',
       });
     }
-
-    // Skip 1inch direct API call - use CoinGecko/Uniswap token lists only (more reliable)
 
     const seen = new Set<string>();
     tokenList = tokenList.filter((t) => {
@@ -251,7 +308,7 @@ export async function loadTokensForChain(chainId: number): Promise<void> {
     });
     statsMapByAddressChain.set(chainId, statsMapByAddress);
 
-    console.log(`Loaded ${tokenList.length} tokens for chain ${chainId}`);
+    console.log(`✓ Loaded ${tokenList.length} tokens for chain ${chainId} (PRIMARY SOURCE)`);
   } catch (e) {
     console.error(`loadTokensForChain error for chainId ${chainId}:`, e);
   }
