@@ -56,12 +56,40 @@ export function TokenInput({
     },
   };
 
+  // Hardcoded blacklist of known scam/fake tokens by address (permanently blocked)
+  const SCAM_TOKEN_BLACKLIST = new Set([
+    // Add detected scam addresses here
+  ]);
+
+  // Whitelist of SAFE tokens for default suggestions (bypasses all other filtering)
+  const DEFAULT_SUGGESTIONS_WHITELIST = new Set([
+    // Ethereum
+    '0x0000000000000000000000000000000000000000', // ETH
+    '0xc02aaa39b223fe8d0a0e8e4f27ead9083c756cc2', // WETH
+    '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+    '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599', // WBTC
+    // Polygon
+    '0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270', // WMATIC
+    '0xc2132d05d31c914a87c6611c10748aeb04b58e8f', // USDT Polygon
+    '0x2791bca1f2de4661ed88a30c99a7a9449aa84174', // USDC Polygon
+    '0x8f3cf7ad23cd3cadbd9735aff958023d60c95e97', // DAI Polygon
+    '0x1bfd67037b42cf73acf2047067bd4303cbd5e4da', // WBTC Polygon
+  ]);
+
   // Filter out FAKE/SCAM tokens by price and volume
   // Only apply filtering for ticker searches, NOT for address searches
   const isLikelyScam = (token: ExtendedToken & { currentPrice?: number; priceChange24h?: number; marketCap?: number }, allTokensInResults?: any[], isAddressSearch: boolean = false) => {
     const symbol = token.symbol.toUpperCase();
     const address = (token.address || '').toLowerCase();
     const chainId = token.chainId || 0;
+    
+    // Check hardcoded blacklist first (highest priority)
+    if (SCAM_TOKEN_BLACKLIST.has(address)) {
+      console.log(`Blocked scam token by blacklist: ${symbol} (${address})`);
+      return true;
+    }
     
     // Whitelist of real native tokens - always allow these
     const realNativeTokens = ['ETH', 'WETH', 'USDT', 'USDC', 'DAI', 'USDE', 'MATIC', 'POL', 'WBTC', 'WMATIC'];
@@ -128,11 +156,10 @@ export function TokenInput({
         });
       });
       
-      const filtered = allTokens.filter(item => !isLikelyScam(item.token, allTokens, false));
-      
-      console.log('After filtering:', filtered.length, 'tokens');
-      filtered.forEach((item, idx) => {
-        console.log(`  ${idx + 1}. ${item.token.symbol}`);
+      // For default suggestions: ONLY show whitelisted safe tokens to prevent scams
+      const filtered = allTokens.filter(item => {
+        const addr = (item.token.address || '').toLowerCase();
+        return DEFAULT_SUGGESTIONS_WHITELIST.has(addr);
       });
       
       setSuggestions(filtered.slice(0, 15));
