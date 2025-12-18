@@ -9,6 +9,20 @@ export interface Token {
   logoURI: string;
 }
 
+// Filter function to remove unwanted tokens
+function isTokenAllowed(token: Token): boolean {
+  const symbol = (token.symbol || '').toUpperCase();
+  const name = (token.name || '').toUpperCase();
+  
+  // Remove tokens with BNB or SOL ticker
+  if (symbol === 'BNB' || symbol === 'SOL') return false;
+  
+  // Remove tokens with BINANCE or Wormhole in name
+  if (name.includes('BINANCE') || name.includes('WORMHOLE')) return false;
+  
+  return true;
+}
+
 export interface TokenStats {
   price: number | null;
   change: number | null;
@@ -189,7 +203,7 @@ async function loadTokensFromSelfHosted(chainId: number): Promise<Token[] | null
       name: t.name || '',
       decimals: t.decimals || 18,
       logoURI: t.logoURI || '',
-    })).filter(t => t.address);
+    })).filter(t => t.address).filter(isTokenAllowed);
     
     console.log(`✓ Loaded ${tokenList.length} tokens from self-hosted ${filename}`);
     return tokenList;
@@ -644,7 +658,7 @@ export async function searchTokens(query: string, chainId?: number): Promise<Tok
   const matches = tokenList.filter((t) => {
     const s = t.symbol || '';
     const n = t.name || '';
-    return s.toLowerCase().includes(q) || n.toLowerCase().includes(q);
+    return (s.toLowerCase().includes(q) || n.toLowerCase().includes(q)) && isTokenAllowed(t);
   });
 
   const withStats = matches.map((t) => {
@@ -690,7 +704,7 @@ export function getTopTokens(limit = 14, chainId?: number): { token: Token; stat
   const tokenList = getTokenList(cid);
   
   const candidates = tokenList.filter((t) => {
-    return getStatsByTokenAddress(t.address, cid) !== null;
+    return isTokenAllowed(t) && getStatsByTokenAddress(t.address, cid) !== null;
   });
 
   const withStats = candidates.map((t) => {
