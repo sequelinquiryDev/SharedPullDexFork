@@ -1,8 +1,7 @@
-const axios = require('axios');
-const fs = require('fs');
+import axios from 'axios';
+import fs from 'fs';
 
 const CG_API_KEY = process.env.VITE_COINGECKO_API_KEY;
-const CMC_API_KEY = process.env.VITE_CMC_API_KEY;
 
 async function fetchTokens() {
   const tokens = {
@@ -11,7 +10,7 @@ async function fetchTokens() {
   };
 
   try {
-    // Fetch Ethereum Top 250 from CoinGecko
+    console.log('Fetching Ethereum Top 250...');
     const ethResponse = await axios.get('https://api.coingecko.com/api/v3/coins/markets', {
       params: {
         vs_currency: 'usd',
@@ -24,14 +23,14 @@ async function fetchTokens() {
       }
     });
     tokens.ethereum = ethResponse.data.map(t => ({
+      address: t.platforms?.ethereum || '',
       symbol: t.symbol.toUpperCase(),
       name: t.name,
-      address: t.platforms?.ethereum || '',
-      decimals: 18, // Default, would need contract call for accuracy but CG provides basic info
+      decimals: 18,
       logoURI: t.image
     })).filter(t => t.address);
 
-    // Fetch Polygon Top 250 from CoinGecko
+    console.log('Fetching Polygon Top 250...');
     const polyResponse = await axios.get('https://api.coingecko.com/api/v3/coins/markets', {
       params: {
         vs_currency: 'usd',
@@ -44,17 +43,18 @@ async function fetchTokens() {
       }
     });
     tokens.polygon = polyResponse.data.map(t => ({
+      address: t.platforms?.['polygon-pos'] || '',
       symbol: t.symbol.toUpperCase(),
       name: t.name,
-      address: t.platforms?.['polygon-pos'] || '',
       decimals: 18,
       logoURI: t.image
     })).filter(t => t.address);
 
-    fs.writeFileSync('client/src/lib/tokens.json', JSON.stringify(tokens, null, 2));
-    console.log('Successfully generated client/src/lib/tokens.json');
+    const outputPath = 'client/src/lib/tokens.json';
+    fs.writeFileSync(outputPath, JSON.stringify(tokens, null, 2));
+    console.log(`Successfully generated ${outputPath} with ${tokens.ethereum.length} ETH tokens and ${tokens.polygon.length} POL tokens.`);
   } catch (error) {
-    console.error('Error fetching tokens:', error.message);
+    console.error('Error fetching tokens:', error.response?.data || error.message);
   }
 }
 
