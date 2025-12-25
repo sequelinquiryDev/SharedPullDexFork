@@ -23,17 +23,9 @@ export interface TokenStats {
   image: string;
 }
 
-type DataSource = 'coingecko' | 'cmc';
-const DATA_SOURCE_ROTATION_INTERVAL = 2 * 60 * 1000;
-
-let currentDataSource: DataSource = 'coingecko';
-let lastSourceRotation = Date.now();
-
 const tokenListByChain = new Map<number, Token[]>();
 const tokenMapByChain = new Map<number, Map<string, Token>>();
-const statsMapByChain = new Map<number, Map<string, TokenStats>>(); // Symbol/Name lookup (legacy)
-const statsMapByAddressChain = new Map<number, Map<string, TokenStats>>(); // Address lookup (primary)
-const priceCache = new Map<string, { price: number | null; ts: number }>();
+const statsMapByAddressChain = new Map<number, Map<string, TokenStats>>(); // On-chain prices by address
 
 // WebSocket path for real-time prices
 const WS_PRICE_URL = typeof window !== 'undefined' 
@@ -76,122 +68,6 @@ function getChainConfigForId(chainId: number) {
   return config;
 }
 
-function getCurrentDataSource(): DataSource {
-  const now = Date.now();
-  if (now - lastSourceRotation >= DATA_SOURCE_ROTATION_INTERVAL) {
-    currentDataSource = currentDataSource === 'coingecko' ? 'cmc' : 'coingecko';
-    lastSourceRotation = now;
-    console.log(`Data source rotated to: ${currentDataSource}`);
-  }
-  return currentDataSource;
-}
-
-async function fetchCMCMarketData(): Promise<Map<string, TokenStats>> {
-  const statsMap = new Map<string, TokenStats>();
-  const cmcApiKey = import.meta.env.VITE_CMC_API_KEY;
-  
-  if (!cmcApiKey) {
-    console.warn('CMC API key not configured, skipping CMC data fetch');
-    return statsMap;
-  }
-
-  try {
-    const response = await fetchWithTimeout(
-      `/api/cmc/listings?limit=250`,
-      { headers: { 'Content-Type': 'application/json' } },
-      10000
-    );
-    
-    if (!response.ok) {
-      throw new Error(`CMC API returned ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    if (data.data && Array.isArray(data.data)) {
-      data.data.forEach((coin: any) => {
-        const symbol = low(coin.symbol || '');
-        const name = low(coin.name || '');
-        const quote = coin.quote?.USD || {};
-        
-        const stat: TokenStats = {
-          price: typeof quote.price === 'number' ? quote.price : null,
-          change: typeof quote.percent_change_24h === 'number' ? quote.percent_change_24h : null,
-          changePeriod: '24h',
-          volume24h: typeof quote.volume_24h === 'number' ? quote.volume_24h : 0,
-          marketCap: typeof quote.market_cap === 'number' ? quote.market_cap : 0,
-          image: '',
-        };
-        
-        if (symbol) statsMap.set(symbol, stat);
-        if (name) statsMap.set(name, stat);
-      });
-    }
-  } catch (e) {
-    console.warn('CMC market data fetch failed:', e);
-  }
-  
-  return statsMap;
-}
-
-async function fetchCoinGeckoMarketData(): Promise<Map<string, TokenStats>> {
-  const statsMap = new Map<string, TokenStats>();
-  
-  try {
-    // Use server proxy to avoid CORS and protect API keys
-    const marketsUrl = `/api/prices/coingecko/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false&price_change_percentage=24h`;
-    const response = await fetchWithTimeout(marketsUrl, {}, 10000);
-    
-    if (!response.ok) {
-      throw new Error(`CoinGecko proxy returned ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    (data as any[]).forEach((coin: any) => {
-      const symbol = low(coin.symbol || '');
-      const name = low(coin.name || '');
-      
-      const stat: TokenStats = {
-        price: typeof coin.current_price === 'number' ? coin.current_price : null,
-        change: typeof coin.price_change_percentage_24h === 'number' ? coin.price_change_percentage_24h : null,
-        changePeriod: '24h',
-        volume24h: typeof coin.total_volume === 'number' ? coin.total_volume : 0,
-        marketCap: typeof coin.market_cap === 'number' ? coin.market_cap : 0,
-        image: coin.image || '',
-      };
-      
-      if (symbol) statsMap.set(symbol, stat);
-      if (name) statsMap.set(name, stat);
-    });
-  } catch (e) {
-    console.warn('CoinGecko market data fetch failed:', e);
-  }
-  
-  return statsMap;
-}
-
-async function fetchMarketData(): Promise<Map<string, TokenStats>> {
-  const source = getCurrentDataSource();
-  
-  let statsMap: Map<string, TokenStats>;
-  
-  if (source === 'cmc') {
-    statsMap = await fetchCMCMarketData();
-    if (statsMap.size === 0) {
-      console.log('CMC returned no data, falling back to CoinGecko');
-      statsMap = await fetchCoinGeckoMarketData();
-    }
-  } else {
-    statsMap = await fetchCoinGeckoMarketData();
-    if (statsMap.size === 0) {
-      console.log('CoinGecko returned no data, falling back to CMC');
-      statsMap = await fetchCMCMarketData();
-    }
-  }
-  
-  return statsMap;
-}
 
 // Load tokens from self-hosted JSON files (PRIMARY SOURCE)
 async function loadTokensFromSelfHosted(chainId: number): Promise<Token[] | null> {
@@ -242,57 +118,6 @@ async function loadTokensFromSelfHosted(chainId: number): Promise<Token[] | null
   }
 }
 
-// Fallback to external APIs (CoinGecko, Uniswap)
-async function loadTokensFromExternalAPIs(chainId: number): Promise<Token[]> {
-  const network = chainIdToCoingeckoNetwork[chainId] || 'polygon-pos';
-  let tokenList: Token[] = [];
-  
-  try {
-    const [cgResponse, uniResponse] = await Promise.all([
-      fetch(`https://tokens.coingecko.com/${network}/all.json`).catch(() => null),
-      fetch('https://tokens.uniswap.org/').catch(() => null),
-    ]);
-
-    if (cgResponse && cgResponse.ok) {
-      const cgData = await cgResponse.json();
-      tokenList = ((cgData.tokens || []) as any[]).map((t: any) => ({
-        address: low(t.address),
-        symbol: t.symbol || '',
-        name: t.name || '',
-        decimals: t.decimals || 18,
-        logoURI: t.logoURI || t.logo || '',
-      }));
-      console.log(`Loaded ${tokenList.length} tokens from CoinGecko (fallback)`);
-    }
-
-    if (uniResponse && uniResponse.ok) {
-      const uniData = await uniResponse.json().catch(() => null);
-      if (uniData && uniData.tokens) {
-        const uniTokens = ((uniData.tokens || []) as any[])
-          .filter((t: any) => t.chainId === chainId)
-          .map((t: any) => ({
-            address: low(t.address),
-            symbol: t.symbol || '',
-            name: t.name || '',
-            decimals: t.decimals || 18,
-            logoURI: t.logoURI || '',
-          }));
-
-        const existingAddrs = new Set(tokenList.map((t) => t.address));
-        uniTokens.forEach((t) => {
-          if (!existingAddrs.has(t.address)) {
-            tokenList.push(t);
-          }
-        });
-        console.log(`Added ${uniTokens.length - (tokenList.length - uniTokens.length)} tokens from Uniswap (fallback)`);
-      }
-    }
-  } catch (e) {
-    console.error(`External API fallback failed for chain ${chainId}:`, e);
-  }
-  
-  return tokenList;
-}
 
 export async function loadTokensForChain(chainId: number): Promise<void> {
   const chainConfig = getChainConfigForId(chainId);
@@ -301,22 +126,17 @@ export async function loadTokensForChain(chainId: number): Promise<void> {
   const tokenMap = new Map<string, Token>();
   
   try {
-    // PRIMARY: Try self-hosted JSON first
+    // PRIMARY: Load from self-hosted JSON only (top 500 tokens per chain)
     console.log(`Loading tokens for chain ${chainId}...`);
     tokenList = await loadTokensFromSelfHosted(chainId) || [];
     
-    // FALLBACK: Only for Ethereum (chainId 1), not for Polygon
-    // Polygon (137) MUST use self-hosted only
-    if (tokenList.length === 0 && chainId === 1) {
-      console.log(`Self-hosted source unavailable, using external APIs as fallback for ETH...`);
-      tokenList = await loadTokensFromExternalAPIs(chainId);
-    } else if (tokenList.length === 0 && chainId === 137) {
-      console.warn(`⚠️ Polygon chain: Self-hosted tokens unavailable, no fallback. Contract address search still works.`);
+    if (tokenList.length === 0) {
+      console.warn(`⚠️ Chain ${chainId}: Token list unavailable. Contract address search still works.`);
     }
 
     tokenList.forEach((t) => tokenMap.set(t.address, t));
 
-    const nativeAddr = cid === 1 
+    const nativeAddr = chainId === 1 
       ? '0x0000000000000000000000000000000000000000'
       : low(config.maticAddr);
     
@@ -337,7 +157,7 @@ export async function loadTokensForChain(chainId: number): Promise<void> {
     };
 
     if (!tokenMap.has(nativeAddr)) {
-      tokenMap.set(nativeAddr, cid === 1 ? ethToken : maticToken);
+      tokenMap.set(nativeAddr, chainId === 1 ? ethToken : maticToken);
     }
 
     // Force add WETH and USDC to the list if missing for ETH chain
@@ -370,21 +190,11 @@ export async function loadTokensForChain(chainId: number): Promise<void> {
     console.log(`[loadTokensForChain] Final list size for chain ${chainId}: ${tokenList.length}`);
     tokenListByChain.set(chainId, tokenList);
     tokenMapByChain.set(chainId, tokenMap);
-
-    const statsMap = await fetchMarketData();
-    statsMapByChain.set(chainId, statsMap);
     
-    // Build address-based stats map to avoid symbol collisions
-    const statsMapByAddress = new Map<string, TokenStats>();
-    tokenList.forEach((token) => {
-      const tokenStats = statsMap.get(low(token.symbol)) || statsMap.get(low(token.name));
-      if (tokenStats) {
-        statsMapByAddress.set(token.address, tokenStats);
-      }
-    });
-    statsMapByAddressChain.set(chainId, statsMapByAddress);
+    // Empty on-chain stats map - will be filled by WebSocket updates
+    statsMapByAddressChain.set(chainId, new Map<string, TokenStats>());
 
-    console.log(`✓ Loaded ${tokenList.length} tokens for chain ${chainId} (PRIMARY SOURCE)`);
+    console.log(`✓ Loaded ${tokenList.length} tokens for chain ${chainId} (self-hosted primary source)`);
   } catch (e) {
     console.error(`loadTokensForChain error for chainId ${chainId}:`, e);
   }
@@ -418,10 +228,6 @@ export function getTokenMap(chainId?: number): Map<string, Token> {
   return tokenMapByChain.get(cid) || new Map();
 }
 
-export function getCgStatsMap(chainId?: number): Map<string, TokenStats> {
-  const cid = chainId ?? config.chainId;
-  return statsMapByChain.get(cid) || new Map();
-}
 
 export function getStatsByTokenAddress(address: string, chainId?: number): TokenStats | null {
   const cid = chainId ?? config.chainId;
@@ -430,249 +236,19 @@ export function getStatsByTokenAddress(address: string, chainId?: number): Token
   return statsMapByAddress?.get(addr) || null;
 }
 
-// Enhanced stats fetcher with professional fallbacks for custom/new tokens
-export async function getEnhancedTokenStats(address: string, chainId?: number): Promise<TokenStats | null> {
-  const cid = chainId ?? config.chainId;
-  const addr = low(address);
-  
-  // First try cached stats
-  const cached = getStatsByTokenAddress(addr, cid);
-  if (cached && cached.price) {
-    return cached;
-  }
-  
-  // Professional fallback cascade for custom tokens
-  const networkMap: Record<number, string> = { 1: 'eth', 137: 'polygon_pos' };
-  const network = networkMap[cid] || 'polygon_pos';
-  
-  // Try DexScreener first (best for new/custom tokens)
-  try {
-    const dexUrl = `https://api.dexscreener.com/latest/dex/tokens/${addr}`;
-    const dexRes = await fetchWithTimeout(dexUrl, {}, 4000);
-    if (dexRes.ok) {
-      const dexData = await dexRes.json();
-      const pairs = dexData?.pairs || [];
-      const chainFilter = cid === 1 ? 'ethereum' : 'polygon';
-      const pair = pairs.find((p: any) => p.chainId === chainFilter) || pairs[0];
-      
-      if (pair) {
-        const priceUsd = pair.priceUsd ? Number(pair.priceUsd) : null;
-        const change24h = pair.priceChange?.h24 ? Number(pair.priceChange.h24) : null;
-        const volume24h = pair.volume?.h24 ? Number(pair.volume.h24) : 0;
-        const liquidity = pair.liquidity?.usd ? Number(pair.liquidity.usd) : 0;
-        
-        if (priceUsd && priceUsd > 0) {
-          const stats: TokenStats = {
-            price: priceUsd,
-            change: change24h,
-            changePeriod: '24h',
-            volume24h: volume24h,
-            marketCap: liquidity * 10, // Estimate based on liquidity
-            image: '',
-          };
-          
-          // Cache for future use
-          const statsMap = statsMapByAddressChain.get(cid) || new Map();
-          statsMap.set(addr, stats);
-          statsMapByAddressChain.set(cid, statsMap);
-          
-          return stats;
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('DexScreener stats fetch failed:', e);
-  }
-  
-  // Try GeckoTerminal as backup
-  try {
-    const gtUrl = `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${addr}`;
-    const gtRes = await fetchWithTimeout(gtUrl, {}, 4000);
-    if (gtRes.ok) {
-      const gtData = await gtRes.json();
-      const attrs = gtData?.data?.attributes;
-      
-      if (attrs && attrs.price_usd) {
-        const priceUsd = Number(attrs.price_usd);
-        const volume24h = attrs.volume_usd?.h24 ? Number(attrs.volume_usd.h24) : 0;
-        const marketCap = attrs.market_cap_usd ? Number(attrs.market_cap_usd) : 0;
-        
-        if (priceUsd > 0) {
-          const stats: TokenStats = {
-            price: priceUsd,
-            change: null, // GeckoTerminal doesn't always have change
-            changePeriod: '24h',
-            volume24h: volume24h,
-            marketCap: marketCap,
-            image: attrs.image_url || '',
-          };
-          
-          const statsMap = statsMapByAddressChain.get(cid) || new Map();
-          statsMap.set(addr, stats);
-          statsMapByAddressChain.set(cid, statsMap);
-          
-          return stats;
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('GeckoTerminal stats fetch failed:', e);
-  }
-  
-  // Final fallback: Try to get at least a price
-  const price = await getTokenPriceUSD(addr, 18, cid);
-  if (price) {
-    const stats: TokenStats = {
-      price: price,
-      change: null,
-      changePeriod: null,
-      volume24h: 0,
-      marketCap: 0,
-      image: '',
-    };
-    
-    const statsMap = statsMapByAddressChain.get(cid) || new Map();
-    statsMap.set(addr, stats);
-    statsMapByAddressChain.set(cid, statsMap);
-    
-    return stats;
-  }
-  
-  return null;
-}
 
 export function getPlaceholderImage(): string {
   return DARK_SVG_PLACEHOLDER;
 }
 
-async function fetch0xPrice(addr: string, chainId?: number): Promise<number | null> {
-  const cid = chainId ?? config.chainId;
-  const chainConfig = getChainConfigForId(cid);
-  
-  try {
-    const sellToken = addr;
-    const buyToken = chainConfig.usdcAddr;
-    const resp = await fetchWithTimeout(
-      `${chainConfig.zeroXBase}/swap/v1/price?sellToken=${encodeURIComponent(sellToken)}&buyToken=${encodeURIComponent(buyToken)}&sellAmount=1`,
-      { headers: { '0x-api-key': config.zeroXApiKey } },
-      3500
-    );
-    if (!resp.ok) throw new Error('0x price fail');
-    const j = await resp.json();
-    if (j && j.price) return Number(j.price);
-    if (j && j.buyAmount) {
-      const val = Number(j.buyAmount);
-      if (Number.isFinite(val) && val > 0) return val;
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
 
-async function fetch1InchQuotePrice(addr: string, decimals = 18, chainId?: number): Promise<number | null> {
-  const cid = chainId ?? config.chainId;
-  const chainConfig = getChainConfigForId(cid);
-  
-  try {
-    const amountBN = ethers.BigNumber.from(10).pow(decimals);
-    const qUrl = `${chainConfig.oneInchBase}/quote?fromTokenAddress=${addr}&toTokenAddress=${chainConfig.usdcAddr}&amount=${amountBN.toString()}`;
-    const res = await fetchWithTimeout(qUrl, {}, 3000);
-    if (!res.ok) throw new Error('1inch non-ok');
-    const j = await res.json();
-    if (!j || !j.toTokenAmount) throw new Error('1inch no toTokenAmount');
-    const usdcAmountBN = ethers.BigNumber.from(j.toTokenAmount);
-    const usdc = Number(ethers.utils.formatUnits(usdcAmountBN, j.toToken?.decimals ?? 6));
-    if (!Number.isFinite(usdc) || usdc <= 0) throw new Error('1inch invalid price');
-    return usdc;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function fetchCoingeckoSimple(addr: string, chainId?: number): Promise<number | null> {
-  const cid = chainId ?? config.chainId;
-  const network = chainIdToCoingeckoNetwork[cid] || 'polygon-pos';
-  
-  try {
-    // Use server proxy to avoid CORS and protect API keys
-    const url = `/api/prices/coingecko/simple/token_price/${network}?contract_addresses=${addr}&vs_currencies=usd`;
-    const res = await fetchWithTimeout(url, {}, 3000);
-    if (!res.ok) throw new Error('cg simple non-ok');
-    const j = await res.json();
-    const v = j[low(addr)]?.usd ?? null;
-    if (v && typeof v === 'number' && v > 0) return v;
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function fetchDexscreenerPrice(addr: string, chainId?: number): Promise<number | null> {
-  const cid = chainId ?? config.chainId;
-  const chainFilter = cid === 1 ? 'ethereum' : 'polygon';
-  
-  try {
-    const url = `https://api.dexscreener.com/latest/dex/tokens/${addr}`;
-    const res = await fetchWithTimeout(url, {}, 3000);
-    if (!res.ok) throw new Error('dexscreener non-ok');
-    const j = await res.json();
-    const pairs = j?.pairs || [];
-    
-    // CRITICAL: Filter by chain to prevent cross-chain price corruption
-    const chainPairs = pairs.filter((p: any) => p?.chainId === chainFilter);
-    const searchPairs = chainPairs.length > 0 ? chainPairs : pairs;
-    
-    for (const p of searchPairs) {
-      if (p?.priceUsd) {
-        const v = Number(p.priceUsd);
-        if (Number.isFinite(v) && v > 0) return v;
-      }
-      if (p?.price) {
-        const v = Number(p.price);
-        if (Number.isFinite(v) && v > 0) return v;
-      }
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function fetchGeckoTerminalPrice(addr: string, chainId?: number): Promise<number | null> {
-  const cid = chainId ?? config.chainId;
-  const networkMap: Record<number, string> = {
-    1: 'eth',
-    137: 'polygon_pos',
-  };
-  const network = networkMap[cid] || 'polygon_pos';
-  
-  try {
-    const url = `https://api.geckoterminal.com/api/v2/networks/${network}/tokens/${addr}`;
-    const res = await fetchWithTimeout(url, {}, 3000);
-    if (!res.ok) throw new Error('geckoterminal non-ok');
-    const j = await res.json();
-    const price = j?.data?.attributes?.price_usd;
-    if (price && typeof price === 'string') {
-      const v = Number(price);
-      if (Number.isFinite(v) && v > 0) return v;
-    }
-    return null;
-  } catch (e) {
-    return null;
-  }
-}
-
-// Removed external price fetching as requested.
+// On-chain price fetching only - no external fallbacks
 export async function getTokenPriceUSD(address: string, decimals = 18, chainId?: number): Promise<number | null> {
   if (!address) return null;
   const addr = low(address);
-  
-  // Ensure chainId is always valid (1 for Ethereum, 137 for Polygon)
   const validChainId = (chainId === 1 || chainId === 137) ? chainId : config.chainId;
   
-  // Removed internal price caching logic as per requirements.
-  // We will rely on server-side 20s caching.
+  // Try on-chain price endpoint only
   try {
     const res = await fetch(`/api/prices/onchain?address=${addr}&chainId=${validChainId}`);
     if (res.ok) {
@@ -869,21 +445,8 @@ export function getTokenLogoUrl(token: Token, chainId?: number): string {
 }
 
 export async function refreshMarketData(chainId?: number): Promise<void> {
-  const cid = chainId ?? config.chainId;
-  const statsMap = await fetchMarketData();
-  statsMapByChain.set(cid, statsMap);
-  
-  // Build address-based stats map for accurate lookups
-  const statsMapByAddress = new Map<string, TokenStats>();
-  const tokenList = getTokenList(cid);
-  tokenList.forEach((token) => {
-    const tokenStats = statsMap.get(low(token.symbol)) || statsMap.get(low(token.name));
-    if (tokenStats) {
-      statsMapByAddress.set(token.address, tokenStats);
-    }
-  });
-  statsMapByAddressChain.set(cid, statsMapByAddress);
-  console.log(`Refreshed market data for chain ${cid}, source: ${currentDataSource}`);
+  // Market data is now streamed via WebSocket
+  console.log(`Market data for chain ${chainId} updated via WebSocket`);
 }
 
 // Fetch real 1-hour price data (12 points at 5-minute intervals)

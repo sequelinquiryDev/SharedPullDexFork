@@ -61,28 +61,7 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
 }
 
 
-// In-memory cache for API responses
-interface CacheEntry {
-  data: unknown;
-  timestamp: number;
-  ttl: number;
-}
-
-const cache = new Map<string, CacheEntry>();
-
-function getCached(key: string): unknown | null {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() - entry.timestamp > entry.ttl) {
-    cache.delete(key);
-    return null;
-  }
-  return entry.data;
-}
-
-function setCache(key: string, data: unknown, ttl: number): void {
-  cache.set(key, { data, timestamp: Date.now(), ttl });
-}
+// REMOVED: General API cache (on-chain prices use dedicated 20s cache)
 
 // Simple rate limiting
 interface RateLimitEntry {
@@ -293,70 +272,9 @@ function getPolRpcUrl(): string {
 // REMOVED: getPublicRpcConfig() - RPC URLs are never exposed to frontend
 // All RPC calls must go through /api/proxy/rpc/* endpoints
 
-// Alternating source for token prices (2-minute sequence)
-let lastPriceSource: 'cmc' | 'coingecko' = 'cmc';
-let lastSourceSwitch = Date.now();
-const SOURCE_SWITCH_INTERVAL = 2 * 60 * 1000; // 2 minutes
+// REMOVED: Alternating price source logic (use on-chain pricing instead)
 
-// Background price cache for secondary sources
-interface BackgroundPrice {
-  price: number;
-  source: string;
-  timestamp: number;
-}
-const backgroundPriceCache = new Map<string, BackgroundPrice>();
-
-// Non-blocking background fetch from secondary sources
-function fetchBackgroundSecondaryPrices(tokenAddresses: string[]): void {
-  if (!tokenAddresses.length) return;
-  
-  // Fire and forget - don't block the response
-  setImmediate(async () => {
-    for (const addr of tokenAddresses.slice(0, 20)) { // Limit to 20 per batch
-      try {
-        // Try 0x (fastest for DEX prices)
-        const zeroXKey = getZeroXApiKey();
-        if (zeroXKey) {
-          const resp = await fetch(
-            `https://polygon.api.0x.org/swap/v1/price?sellToken=${addr}&buyToken=${process.env.VITE_USDC_ADDR || '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'}&sellAmount=1`,
-            { 
-              headers: { '0x-api-key': zeroXKey },
-              signal: AbortSignal.timeout(2000)
-            }
-          ).catch(() => null);
-          
-          if (resp?.ok) {
-            const data = await resp.json();
-            if (data.price) {
-              const price = Number(data.price);
-              if (price > 0) {
-                backgroundPriceCache.set(`0x:${addr}`, { price, source: '0x', timestamp: Date.now() });
-              }
-            }
-          }
-        }
-        
-        // Try DexScreener (reliable for any token)
-        const dexResp = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${addr}`, {
-          signal: AbortSignal.timeout(2000)
-        }).catch(() => null);
-        
-        if (dexResp?.ok) {
-          const data = await dexResp.json();
-          const pairs = data?.pairs || [];
-          if (pairs[0]?.priceUsd) {
-            const price = Number(pairs[0].priceUsd);
-            if (price > 0) {
-              backgroundPriceCache.set(`dex:${addr}`, { price, source: 'dexscreener', timestamp: Date.now() });
-            }
-          }
-        }
-      } catch (e) {
-        // Silent fail - background operation
-      }
-    }
-  });
-}
+// REMOVED: Background price cache for secondary sources (use on-chain pricing instead)
 
 export async function registerRoutes(
   httpServer: Server,
@@ -483,181 +401,13 @@ export async function registerRoutes(
     });
   });
 
-  // GET /api/prices/tokens - Proxies token data with 2-min sequence alternation + background loading
-  app.get("/api/prices/tokens", rateLimitMiddleware, async (req, res) => {
-    try {
-      const cacheKey = 'prices_tokens';
-      const cached = getCached(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
+  // REMOVED: /api/prices/tokens endpoint (use on-chain pricing instead)
 
-      // 2-minute round-robin alternation between CoinGecko & CMC (friendly to free APIs)
-      const now = Date.now();
-      
-      let data: unknown = null;
-      let source = "on-chain";
-      
-      // Removed external price fetching as requested.
-      // Logic for on-chain fetcher will be implemented in next step.
-      
-      if (!data) {
-        return res.status(503).json({ error: 'On-chain price fetcher initializing' });
-      }
-      
-      // Extract token addresses for background price loading
-      const tokenAddresses = Array.isArray(data) 
-        ? data.slice(0, 20).map((t: any) => t.contract_address || t.id).filter(Boolean)
-        : [];
-      
-      // Non-blocking background fetch from secondary sources
-      if (tokenAddresses.length) {
-        fetchBackgroundSecondaryPrices(tokenAddresses);
-      }
-      
-      const result = { data, source, cached: false };
-      setCache(cacheKey, result, 10000); // Cache for 10 seconds (faster price updates with 2-min rotation)
-      return res.json(result);
-    } catch (error) {
-      console.error('Price tokens error:', error);
-      return res.status(500).json({ error: 'Failed to fetch token prices' });
-    }
-  });
+  // REMOVED: CoinGecko proxy (use on-chain pricing instead)
 
-  // Proxy: /api/prices/coingecko/* -> CoinGecko API
-  app.get("/api/prices/coingecko/*", rateLimitMiddleware, async (req, res) => {
-    try {
-      const apiKey = getCoingeckoApiKey();
-      if (!apiKey) {
-        return res.status(503).json({ error: 'CoinGecko API key not configured' });
-      }
+  // REMOVED: CMC proxy (use on-chain pricing instead)
 
-      const path = req.params[0] || '';
-      const queryString = new URLSearchParams(req.query as Record<string, string>).toString();
-      const cacheKey = `coingecko:${path}:${queryString}`;
-      
-      const cached = getCached(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      const url = `https://api.coingecko.com/api/v3/${path}${queryString ? '?' + queryString : ''}`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'x-cg-demo-api-key': apiKey,
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('CoinGecko API error:', response.status, errorText);
-        return res.status(response.status).json({ 
-          error: 'CoinGecko API request failed',
-          status: response.status 
-        });
-      }
-
-      const data = await response.json();
-      setCache(cacheKey, data, 10000); // Cache for 10 seconds (optimized for fast refresh)
-      return res.json(data);
-    } catch (error) {
-      console.error('CoinGecko proxy error:', error);
-      return res.status(500).json({ error: 'Failed to fetch CoinGecko data' });
-    }
-  });
-
-  // Proxy: /api/prices/cmc/* -> CoinMarketCap API
-  app.get("/api/prices/cmc/*", rateLimitMiddleware, async (req, res) => {
-    try {
-      const cmcApiKey = getCmcApiKey();
-      if (!cmcApiKey) {
-        return res.status(503).json({ error: 'CMC API key not configured' });
-      }
-
-      const path = req.params[0] || '';
-      const queryString = new URLSearchParams(req.query as Record<string, string>).toString();
-      const cacheKey = `cmc:${path}:${queryString}`;
-      
-      const cached = getCached(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      const url = `https://pro-api.coinmarketcap.com/${path}${queryString ? '?' + queryString : ''}`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'X-CMC_PRO_API_KEY': cmcApiKey,
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('CMC API error:', response.status, errorText);
-        return res.status(response.status).json({ 
-          error: 'CMC API request failed',
-          status: response.status 
-        });
-      }
-
-      const data = await response.json();
-      setCache(cacheKey, data, 10000); // Cache for 10 seconds (optimized for fast refresh)
-      return res.json(data);
-    } catch (error) {
-      console.error('CMC proxy error:', error);
-      return res.status(500).json({ error: 'Failed to fetch CMC data' });
-    }
-  });
-
-  // Keep existing CMC listings endpoint for backward compatibility
-  app.get("/api/cmc/listings", rateLimitMiddleware, async (req, res) => {
-    try {
-      const cmcApiKey = getCmcApiKey();
-      
-      if (!cmcApiKey) {
-        return res.status(503).json({ 
-          error: "CMC API key not configured" 
-        });
-      }
-
-      const cacheKey = `cmc_listings:${req.query.limit || 250}`;
-      const cached = getCached(cacheKey);
-      if (cached) {
-        return res.json(cached);
-      }
-
-      const limit = req.query.limit || 250;
-      const url = `https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest?limit=${limit}&convert=USD`;
-      
-      const response = await fetch(url, {
-        headers: {
-          'X-CMC_PRO_API_KEY': cmcApiKey,
-          'Accept': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('CMC API error:', response.status, errorText);
-        return res.status(response.status).json({ 
-          error: "CMC API request failed",
-          status: response.status 
-        });
-      }
-
-      const data = await response.json();
-      setCache(cacheKey, data, 60000); // Cache for 1 minute
-      return res.json(data);
-    } catch (error) {
-      console.error('CMC proxy error:', error);
-      return res.status(500).json({ 
-        error: "Failed to fetch CMC data" 
-      });
-    }
-  });
+  // REMOVED: CMC listings endpoint (use on-chain pricing instead)
 
   // Proxy for 0x API - Polygon (for swap quotes)
   app.get("/api/proxy/0x/*", rateLimitMiddleware, async (req, res) => {
