@@ -116,59 +116,72 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
     try {
       decimals = await tokenContract.decimals();
     } catch (e) {
-      // Fallback: Explorer API
-      try {
-        const apiKey = getEthPolApiKey();
-        if (apiKey) {
-          const baseUrl = chainId === 1 ? 'https://api.etherscan.io' : 'https://api.polygonscan.com';
-          const url = `${baseUrl}/api?module=account&action=tokentx&contractaddress=${tokenAddr}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
-          const resp = await fetch(url);
-          const data = await resp.json();
-          // We can also use a dedicated contract metadata endpoint if available, 
-          // but fetching a single tx usually includes metadata in some scanners or we can use another endpoint.
-          // For now, let's try to find it in our JSON if it was already saved.
-        }
-      } catch (scanErr) {
-        console.error("Scanner fallback failed:", scanErr);
-      }
-      
+      // Fallback: Check local JSON cache first
       const filename = chainId === 1 ? 'eth-tokens.json' : 'polygon-tokens.json';
-      const tokens = JSON.parse(fs.readFileSync(path.join(process.cwd(), filename), 'utf-8'));
-      const savedToken = tokens.find((t: any) => t.address.toLowerCase() === tokenAddr);
-      if (savedToken && savedToken.decimals) {
-        decimals = savedToken.decimals;
-      } else {
-        console.warn(`Could not fetch decimals for ${tokenAddr}, defaulting to 18`);
-        decimals = 18;
+      try {
+        const data = fs.readFileSync(path.join(process.cwd(), filename), 'utf-8');
+        const tokens = JSON.parse(data);
+        const savedToken = tokens.find((t: any) => t.address.toLowerCase() === tokenAddr);
+        if (savedToken && savedToken.decimals) {
+          decimals = savedToken.decimals;
+        } else {
+          // Fallback: Explorer API
+          const apiKey = getEthPolApiKey();
+          if (apiKey) {
+            const baseUrl = chainId === 1 ? 'https://api.etherscan.io' : 'https://api.polygonscan.com';
+            const url = `${baseUrl}/api?module=account&action=tokentx&contractaddress=${tokenAddr}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
+            const resp = await fetch(url);
+            const scanData = await resp.json();
+            
+            // Try to find decimals from transactions if possible or use a more specific endpoint
+            // For now, if we can't get it from contract, we check if the scanner has a metadata endpoint
+            const metadataUrl = `${baseUrl}/api?module=token&action=tokeninfo&contractaddress=${tokenAddr}&apikey=${apiKey}`;
+            const metaResp = await fetch(metadataUrl);
+            const metaData = await metaResp.json();
+            if (metaData.status === '1' && metaData.result?.[0]?.divisor) {
+              decimals = Number(metaData.result[0].divisor);
+            }
+          }
+        }
+      } catch (fileErr) {
+        console.error("Decimal fallback error:", fileErr);
       }
     }
 
-    // Save decimals back to JSON if found and not present
+    // Dynamic Discovery & Decimal Persistence
     const filename = chainId === 1 ? 'eth-tokens.json' : 'polygon-tokens.json';
-    const tokens = JSON.parse(fs.readFileSync(path.join(process.cwd(), filename), 'utf-8'));
-    const tokenIdx = tokens.findIndex((t: any) => t.address.toLowerCase() === tokenAddr);
-    
-    if (tokenIdx !== -1 && !tokens[tokenIdx].decimals) {
-      tokens[tokenIdx].decimals = decimals;
-      fs.writeFileSync(path.join(process.cwd(), filename), JSON.stringify(tokens, null, 2));
-    } else if (tokenIdx === -1) {
-      // Dynamic Discovery: Add new token searched by contract
-      try {
-        const symbol = await tokenContract.symbol();
-        const newToken = {
-          address: tokenAddr,
-          name: symbol, // Placeholder name
-          symbol: symbol,
-          decimals: decimals,
-          chainId: chainId,
-          logoURI: `https://assets.coingecko.com/coins/images/1/thumb/placeholder.png`
-        };
-        tokens.push(newToken);
-        fs.writeFileSync(path.join(process.cwd(), filename), JSON.stringify(tokens, null, 2));
-        console.log(`Dynamic Discovery: Added new token ${tokenAddr} to ${filename}`);
-      } catch (symErr) {
-        console.error("Could not add discovered token metadata:", symErr);
+    try {
+      const data = fs.readFileSync(path.join(process.cwd(), filename), 'utf-8');
+      let tokens = JSON.parse(data);
+      const tokenIdx = tokens.findIndex((t: any) => t.address.toLowerCase() === tokenAddr);
+      
+      if (tokenIdx !== -1) {
+        if (!tokens[tokenIdx].decimals) {
+          tokens[tokenIdx].decimals = decimals;
+          fs.writeFileSync(path.join(process.cwd(), filename), JSON.stringify(tokens, null, 2));
+          console.log(`Updated decimals for ${tokens[tokenIdx].symbol} in ${filename}`);
+        }
+      } else {
+        // Dynamic Discovery: Add new token searched by contract
+        try {
+          const symbol = await tokenContract.symbol();
+          const newToken = {
+            address: tokenAddr,
+            name: symbol,
+            symbol: symbol,
+            decimals: decimals,
+            chainId: chainId,
+            logoURI: `https://assets.coingecko.com/coins/images/1/thumb/placeholder.png`
+          };
+          tokens.push(newToken);
+          fs.writeFileSync(path.join(process.cwd(), filename), JSON.stringify(tokens, null, 2));
+          console.log(`Dynamic Discovery: Added new token ${symbol} (${tokenAddr}) to ${filename}`);
+        } catch (symErr) {
+          console.error("Could not fetch metadata for new token discovery:", symErr);
+        }
       }
+    } catch (saveErr) {
+      console.error("Token discovery save failed:", saveErr);
     }
 
     // Try to find price against USDC, USDT, or WETH
