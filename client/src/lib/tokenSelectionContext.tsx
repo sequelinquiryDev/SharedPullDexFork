@@ -18,9 +18,9 @@ export function TokenSelectionProvider({ children }: { children: ReactNode }) {
   
   const getRandomTokens = useCallback((cid: number) => {
     const list = getTokenList(cid);
-    if (list.length < 2) return { from: null, to: null };
+    if (!list || list.length === 0) return { from: null, to: null };
+    if (list.length === 1) return { from: list[0], to: null };
     
-    // Pick two distinct random tokens
     const fromIdx = Math.floor(Math.random() * list.length);
     let toIdx = Math.floor(Math.random() * list.length);
     while (toIdx === fromIdx) {
@@ -34,7 +34,6 @@ export function TokenSelectionProvider({ children }: { children: ReactNode }) {
   const [selectedToToken, setSelectedToToken] = useState<Token | null>(null);
   const [selectionVersion, setSelectionVersion] = useState(0);
 
-  // Initialize and update when chain changes
   useEffect(() => {
     const { from, to } = getRandomTokens(chainId);
     setSelectedFromToken(from);
