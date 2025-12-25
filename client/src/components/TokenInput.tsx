@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, loadTokensForChain, getTokenLogoUrl } from '@/lib/tokenService';
+import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, loadTokensForChain, getTokenLogoUrl, getTokenPriceUSD } from '@/lib/tokenService';
 import { formatUSD, low, isAddress } from '@/lib/config';
 import { useChain } from '@/lib/chainContext';
 
@@ -75,19 +75,20 @@ export function TokenInput({
         const topTokens = getTopTokens(chain === 'BRG' ? 8 : 15, cid);
         console.log(`[handleSearch] topTokens for ${cid}:`, topTokens.length);
         const cgStats = getCgStatsMap(cid);
-        topTokens.forEach(({ token, stats }) => {
+        for (const { token, stats } of topTokens) {
           const tokenStats = stats || cgStats.get(low(token.symbol)) || cgStats.get(low(token.name));
+          const currentPrice = tokenStats?.price ?? await getTokenPriceUSD(token.address, token.decimals, cid);
           allTokens.push({
             token: {
               ...token,
               chainId: cid,
-              currentPrice: tokenStats?.price ?? undefined,
+              currentPrice,
               priceChange24h: tokenStats?.change ?? undefined,
             },
             stats: tokenStats || null,
-            price: tokenStats?.price ?? null,
+            price: currentPrice ?? null,
           });
-        });
+        }
       }
       console.log('[handleSearch] allTokens pre-filter:', allTokens.length, allTokens);
       const filtered = allTokens.filter(item => !isLikelyScam(item.token, allTokens, false));
@@ -108,15 +109,16 @@ export function TokenInput({
           if (token) {
             const cgStats = getCgStatsMap(cid);
             const stats = cgStats.get(low(token.symbol)) || cgStats.get(low(token.name)) || null;
+            const currentPrice = stats?.price ?? await getTokenPriceUSD(token.address, token.decimals, cid);
             allResults.push({
               token: {
                 ...token,
                 chainId: cid,
-                currentPrice: stats?.price ?? undefined,
+                currentPrice,
                 priceChange24h: stats?.change ?? undefined,
               },
               stats,
-              price: stats?.price ?? null,
+              price: currentPrice ?? null,
               marketCap: stats?.marketCap || 0,
             });
           }
@@ -125,22 +127,22 @@ export function TokenInput({
           console.log(`[handleSearch] results for ${cid}:`, results.length);
           const cgStats = getCgStatsMap(cid);
 
-          results.forEach((token) => {
+          for (const token of results) {
             const stats = cgStats.get(low(token.symbol)) || cgStats.get(low(token.name)) || null;
-            const price = stats?.price ?? null;
-            const marketCap = stats?.marketCap || (stats?.price && stats?.volume24h ? (stats.price * stats.volume24h * 1000) : 0);
+            const currentPrice = stats?.price ?? await getTokenPriceUSD(token.address, token.decimals, cid);
+            const marketCap = stats?.marketCap || (currentPrice && stats?.volume24h ? (currentPrice * stats.volume24h * 1000) : 0);
             allResults.push({
               token: {
                 ...token,
                 chainId: cid,
-                currentPrice: stats?.price ?? undefined,
+                currentPrice,
                 priceChange24h: stats?.change ?? undefined,
               },
               stats,
-              price,
+              price: currentPrice ?? null,
               marketCap,
             });
-          });
+          }
         }
       }
 
