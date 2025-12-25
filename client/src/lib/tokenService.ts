@@ -206,31 +206,35 @@ async function fetchMarketData(): Promise<Map<string, TokenStats>> {
 async function loadTokensFromSelfHosted(chainId: number): Promise<Token[] | null> {
   try {
     const filename = chainId === 1 ? 'eth-tokens.json' : 'polygon-tokens.json';
-    const response = await fetchWithTimeout(`/api/tokens/${filename}`, {}, 5000);
+    const response = await fetchWithTimeout(`/api/tokens/${chainId === 1 ? 'ethereum' : 'polygon'}`, {}, 5000);
     
     if (!response.ok) {
-      console.log(`Self-hosted ${filename} not found (${response.status})`);
-      return null;
+      console.log(`Self-hosted API /api/tokens/${chainId === 1 ? 'ethereum' : 'polygon'} not found (${response.status}), trying public fallback...`);
+      const fallbackRes = await fetchWithTimeout(`/${filename}`, {}, 5000);
+      if (!fallbackRes.ok) return null;
+      const data = await fallbackRes.json();
+      return (Array.isArray(data) ? data : (data.tokens || [])) as Token[];
     }
     
     const data = await response.json();
+    
     // Wrap tokens in the expected structure if it's just an array
     const tokens = (Array.isArray(data) ? data : (data.tokens || [])) as any[];
     
     if (tokens.length === 0) {
-      console.warn(`Self-hosted ${filename} has empty tokens array`);
+      console.warn(`Self-hosted API returned empty tokens array`);
       return null;
     }
     
     const tokenList: Token[] = tokens.map((t: any) => ({
-      address: low(t.address || ''),
+      address: low(t.address || t.tokenAddress || ''),
       symbol: t.symbol || '',
       name: t.name || '',
       decimals: t.decimals || 18,
-      logoURI: t.logoURI || '',
+      logoURI: t.logoURI || t.logo || '',
     })).filter(t => t.address).filter(isTokenAllowed);
     
-    console.log(`✓ Loaded ${tokenList.length} tokens from self-hosted ${filename}`);
+    console.log(`✓ Loaded ${tokenList.length} tokens for chain ${chainId}`);
     return tokenList;
   } catch (e) {
     console.warn(`Failed to load self-hosted tokens for chain ${chainId}:`, e);
@@ -690,37 +694,24 @@ export function getTopTokens(limit = 14, chainId?: number): { token: Token; stat
   const cid = chainId ?? config.chainId;
   const tokenList = getTokenList(cid);
   
-  const candidates = tokenList.filter((t) => {
-    return isTokenAllowed(t) && getStatsByTokenAddress(t.address, cid) !== null;
-  });
+  // Allow tokens even if stats are null initially
+  const candidates = tokenList.filter((t) => isTokenAllowed(t));
 
   const withStats = candidates.map((t) => {
     const stat = getStatsByTokenAddress(t.address, cid);
     return { token: t, stats: stat };
   });
 
-  const halfLimit = Math.floor(limit / 2);
-  
-  const byMarketCap = [...withStats]
-    .filter((x) => x.stats?.marketCap && x.stats.marketCap > 0)
-    .sort((a, b) => (b.stats?.marketCap || 0) - (a.stats?.marketCap || 0))
-    .slice(0, halfLimit);
+  if (withStats.length === 0) return [];
 
-  const usedAddresses = new Set(byMarketCap.map((x) => x.token.address));
-  
-  const byVolume = [...withStats]
-    .filter((x) => !usedAddresses.has(x.token.address) && x.stats?.volume24h && x.stats.volume24h > 0)
-    .sort((a, b) => (b.stats?.volume24h || 0) - (a.stats?.volume24h || 0))
-    .slice(0, halfLimit);
+  // Sort by market cap if stats available, otherwise keep original order
+  const sorted = [...withStats].sort((a, b) => {
+    const mcA = a.stats?.marketCap || 0;
+    const mcB = b.stats?.marketCap || 0;
+    return mcB - mcA;
+  });
 
-  const combined = [...byMarketCap, ...byVolume];
-  
-  const seen = new Set<string>();
-  return combined.filter((x) => {
-    if (seen.has(x.token.address)) return false;
-    seen.add(x.token.address);
-    return true;
-  }).slice(0, limit);
+  return sorted.slice(0, limit);
 }
 
 export function getTopTokensByChain(chainId: number, limit = 14): { token: Token; stats: TokenStats | null }[] {

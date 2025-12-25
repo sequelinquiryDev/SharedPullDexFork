@@ -58,21 +58,21 @@ export function TokenInput({
 
   // Filter out FAKE/SCAM tokens by detecting suspicious characteristics
   // Only apply filtering for ticker searches, NOT for address searches
-  const isLikelyScam = (token: ExtendedToken & { currentPrice?: number; priceChange24h?: number; marketCap?: number }, allTokensInResults?: any[], isAddressSearch: boolean = false) => {
-    const symbol = token.symbol.toUpperCase();
-    const name = token.name.toUpperCase();
+    const isLikelyScam = (token: ExtendedToken & { currentPrice?: number; priceChange24h?: number; marketCap?: number }, allTokensInResults?: any[], isAddressSearch: boolean = false) => {
+    const symbol = (token.symbol || '').toUpperCase();
+    const name = (token.name || '').toUpperCase();
     const address = (token.address || '').toLowerCase();
-    const chainId = token.chainId || 0;
+    const chainIdValue = token.chainId || 0;
     
     // Check stablecoin whitelist first - ONLY allow whitelisted addresses (ALWAYS apply)
     if (symbol === 'USDT' || symbol === 'USDC') {
-      const chainWhitelist = STABLECOIN_WHITELIST[chainId as keyof typeof STABLECOIN_WHITELIST];
+      const chainWhitelist = STABLECOIN_WHITELIST[String(chainIdValue) as keyof typeof STABLECOIN_WHITELIST];
       if (chainWhitelist && chainWhitelist[symbol as 'USDT' | 'USDC']) {
         const whitelistedAddress = chainWhitelist[symbol as 'USDT' | 'USDC'].toLowerCase();
         if (address === whitelistedAddress) return false;
+        console.log('[isLikelyScam] Filtering fake stablecoin:', symbol, address);
         return true;
       }
-      return true;
     }
     
     // Skip additional filters if this is an address search
@@ -124,11 +124,12 @@ export function TokenInput({
     }
     
     // If there are multiple tokens with same symbol, filter lower market cap ones (likely fakes)
-    if (allTokensInResults) {
-      const sameSymbolTokens = allTokensInResults.filter(t => t.token?.symbol?.toUpperCase() === symbol);
+    if (allTokensInResults && allTokensInResults.length > 1) {
+      const sameSymbolTokens = allTokensInResults.filter(t => (t.token?.symbol || '').toUpperCase() === symbol);
       if (sameSymbolTokens.length > 1) {
         const maxMarketCap = Math.max(...sameSymbolTokens.map(t => t.marketCap || 0));
-        if ((token.marketCap || 0) < maxMarketCap * 0.05) {
+        if (maxMarketCap > 0 && (token.marketCap || 0) < maxMarketCap * 0.05) {
+          console.log('[isLikelyScam] Filtering low market cap clone:', symbol, address);
           return true;
         }
       }
@@ -140,12 +141,15 @@ export function TokenInput({
   const handleSearch = useCallback(async (query: string) => {
     // BRG mode: search both chains; otherwise single chain
     const chainIds = chain === 'BRG' ? [1, 137] : [chain === 'ETH' ? 1 : 137];
+    console.log('[handleSearch] query:', query, 'chainIds:', chainIds);
     
     if (!query) {
+      console.log('[handleSearch] Empty query, fetching top tokens for chainIds:', chainIds);
       const allTokens: { token: ExtendedToken & { currentPrice?: number; priceChange24h?: number }; stats: TokenStats | null; price: number | null }[] = [];
       
       for (const cid of chainIds) {
         const topTokens = getTopTokens(chain === 'BRG' ? 8 : 15, cid);
+        console.log(`[handleSearch] topTokens for ${cid}:`, topTokens.length);
         const cgStats = getCgStatsMap(cid);
         topTokens.forEach(({ token, stats }) => {
           const tokenStats = stats || cgStats.get(low(token.symbol)) || cgStats.get(low(token.name));
@@ -161,7 +165,9 @@ export function TokenInput({
           });
         });
       }
+      console.log('[handleSearch] allTokens pre-filter:', allTokens.length, allTokens);
       const filtered = allTokens.filter(item => !isLikelyScam(item.token, allTokens, false));
+      console.log('[handleSearch] allTokens post-filter:', filtered.length, filtered);
       setSuggestions(filtered.slice(0, 15));
       setShowSuggestions(true);
       return;
@@ -192,6 +198,7 @@ export function TokenInput({
           }
         } else {
           const results = await searchTokens(query, cid);
+          console.log(`[handleSearch] results for ${cid}:`, results.length);
           const cgStats = getCgStatsMap(cid);
 
           results.forEach((token) => {
