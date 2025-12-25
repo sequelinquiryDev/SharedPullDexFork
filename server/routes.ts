@@ -129,17 +129,22 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
           const apiKey = getEthPolApiKey();
           if (apiKey) {
             const baseUrl = chainId === 1 ? 'https://api.etherscan.io' : 'https://api.polygonscan.com';
-            const url = `${baseUrl}/api?module=account&action=tokentx&contractaddress=${tokenAddr}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
-            const resp = await fetch(url);
-            const scanData = await resp.json();
             
-            // Try to find decimals from transactions if possible or use a more specific endpoint
-            // For now, if we can't get it from contract, we check if the scanner has a metadata endpoint
+            // Try dedicated token metadata endpoint first (more reliable for decimals)
             const metadataUrl = `${baseUrl}/api?module=token&action=tokeninfo&contractaddress=${tokenAddr}&apikey=${apiKey}`;
             const metaResp = await fetch(metadataUrl);
             const metaData = await metaResp.json();
+            
             if (metaData.status === '1' && metaData.result?.[0]?.divisor) {
               decimals = Number(metaData.result[0].divisor);
+            } else {
+              // Final fallback: try to find decimals from transactions list
+              const txUrl = `${baseUrl}/api?module=account&action=tokentx&contractaddress=${tokenAddr}&page=1&offset=1&sort=desc&apikey=${apiKey}`;
+              const txResp = await fetch(txUrl);
+              const txData = await txResp.json();
+              if (txData.status === '1' && txData.result?.[0]?.tokenDecimal) {
+                decimals = Number(txData.result[0].tokenDecimal);
+              }
             }
           }
         }
