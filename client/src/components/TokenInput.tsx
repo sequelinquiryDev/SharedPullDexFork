@@ -254,6 +254,12 @@ export function TokenInput({
     if (!showSuggestions || suggestions.length === 0) return;
 
     const updatePrices = () => {
+      // Trigger background caching for each suggestion shown
+      suggestions.forEach(item => {
+        const tokenChainId = (item.token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
+        fetch(`/api/prices/onchain?address=${item.token.address}&chainId=${tokenChainId}`).catch(() => {});
+      });
+
       setSuggestions((prev) =>
         prev.map((item) => {
           const tokenChainId = (item.token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);

@@ -183,6 +183,10 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
       const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
       const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
       
+      // Request immediate server-side caching if token shows in suggestions
+      // The server will fetch and cache the price for 20s
+      fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`).catch(() => {});
+
       const unsubscribe = subscribeToPrice(token.address, tokenChainId, (priceData: OnChainPrice) => {
         setSuggestions((prev) =>
           prev.map((item) => {

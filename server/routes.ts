@@ -306,7 +306,8 @@ function recordChatMessage(ip: string): void {
 setInterval(() => {
   const now = Date.now();
   const entriesToDelete: string[] = [];
-  for (const ip of Array.from(chatRateLimits.keys())) {
+  const ips = Array.from(chatRateLimits.keys());
+  for (const ip of ips) {
     const entry = chatRateLimits.get(ip);
     if (entry) {
       const hourStart = now - CHAT_HOUR_MS;
@@ -341,7 +342,8 @@ function checkRateLimit(ip: string): boolean {
 setInterval(() => {
   const now = Date.now();
   const entriesToDelete: string[] = [];
-  for (const ip of Array.from(rateLimits.keys())) {
+  const ips = Array.from(rateLimits.keys());
+  for (const ip of ips) {
     const entry = rateLimits.get(ip);
     if (entry && now > entry.resetTime) {
       entriesToDelete.push(ip);
@@ -426,20 +428,60 @@ function getPolRpcUrl(): string {
 
 // REMOVED: Background price cache for secondary sources (use on-chain pricing instead)
 
+// Single-flight locks for price fetching to ensure scalability
+const priceFetchingLocks = new Set<string>();
+
+// Professional background price refresher for 900 tokens
+async function startBackgroundPriceRefresher() {
+  setInterval(async () => {
+    try {
+      const ethData = fs.readFileSync(path.join(process.cwd(), "eth-tokens.json"), 'utf-8');
+      const polData = fs.readFileSync(path.join(process.cwd(), "polygon-tokens.json"), 'utf-8');
+      const ethTokens = JSON.parse(ethData);
+      const polTokens = JSON.parse(polData);
+      
+      const allTokens = [...ethTokens, ...polTokens];
+      if (allTokens.length === 0) return;
+
+      // Professional Algo: Fetch 450 tokens in 10s, total 900 in 20s
+      // Batching to avoid RPC rate limits (approx 45 tokens per second)
+      const batchSize = 45;
+      const intervalMs = 1000;
+      
+      for (let i = 0; i < allTokens.length; i += batchSize) {
+        const batch = allTokens.slice(i, i + batchSize);
+        // Background refresh only for tokens not currently being fetched by single-flight
+        await Promise.all(batch.map(t => getOnChainPrice(t.address, t.chainId)));
+        await new Promise(r => setTimeout(r, intervalMs));
+      }
+    } catch (e) {
+      console.error("Background refresher error:", e);
+    }
+  }, 20000); // Repeat every 20 seconds
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   // Update token lists on startup (fetches 450 per chain)
-  updateTokenLists().catch(console.error);
+  updateTokenLists().then(() => {
+    startBackgroundPriceRefresher();
+  }).catch(console.error);
 
   const wss = new WebSocketServer({ server: httpServer, path: '/api/ws/prices' });
 
-  // Single-flight locks for price fetching to ensure scalability
-  const priceFetchingLocks = new Set<string>();
-
   wss.on('connection', (ws) => {
     let currentToken: string | null = null;
+
+    // Unified price update handler for suggestions and active subscriptions
+    async function handlePriceRequest(address: string, chainId: number, ws?: WebSocket) {
+      const stats = await getOnChainPrice(address, chainId);
+      if (stats && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'price', data: stats, address, chainId }));
+      }
+      return stats;
+    }
 
     ws.on('message', async (message) => {
       try {
@@ -461,13 +503,10 @@ export async function registerRoutes(
           }
           const subInfo = activeSubscriptions.get(subKey)!;
           subInfo.clients.add(ws);
-          subInfo.lastSeen = Date.now(); // Track last activity
+          subInfo.lastSeen = Date.now(); // Track last activity (5min TTL)
           
-          // Send immediate price
-          const stats = await getOnChainPrice(address, chainId);
-          if (stats && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'price', data: stats, address, chainId }));
-          }
+          // Send immediate price (Single-flight optimized)
+          await handlePriceRequest(address, chainId, ws);
         } else if (data.type === 'unsubscribe') {
           const { address, chainId } = data;
           const subKey = `${chainId}-${address.toLowerCase()}`;
@@ -534,8 +573,9 @@ export async function registerRoutes(
   setInterval(() => {
     const now = Date.now();
     const toDelete: string[] = [];
+    const keys = Array.from(activeSubscriptions.keys());
     
-    for (const subKey of Array.from(activeSubscriptions.keys())) {
+    for (const subKey of keys) {
       const subInfo = activeSubscriptions.get(subKey);
       if (!subInfo || (subInfo.clients.size === 0 && now - subInfo.lastSeen > SUBSCRIPTION_TIMEOUT)) {
         toDelete.push(subKey);
@@ -549,10 +589,11 @@ export async function registerRoutes(
   }, 60000);
 
   // GET /api/prices/onchain - Professional on-chain price fetcher
-  app.get("/api/prices/onchain", async (req, res) => {
+  app.get("/api/prices/onchain", rateLimitMiddleware, async (req, res) => {
     const { address, chainId } = req.query;
     if (!address || !chainId) return res.status(400).json({ error: "Missing address or chainId" });
     
+    // Single-flight and cache check handled inside getOnChainPrice
     const stats = await getOnChainPrice(String(address), Number(chainId));
     if (!stats) return res.status(503).json({ error: "Failed to fetch on-chain data" });
     

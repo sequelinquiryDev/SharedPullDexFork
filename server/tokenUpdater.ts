@@ -5,26 +5,29 @@ const COINGECKO_API_KEY = process.env.VITE_COINGECKO_API_KEY || "";
 
 async function fetchTokens(chainId: number, platform: string, limit: number) {
   try {
-    // Force standard api.coingecko.com for Demo keys as per error message
     const baseUrl = "https://api.coingecko.com/api/v3";
     const authParam = COINGECKO_API_KEY ? `&x_cg_demo_api_key=${COINGECKO_API_KEY}` : "";
     
-    // Using platform filter in coins/markets
-    const url = `${baseUrl}/coins/markets?vs_currency=usd&category=${platform === 'ethereum' ? 'ethereum-ecosystem' : 'polygon-ecosystem'}&order=market_cap_desc&per_page=${limit}&page=1&sparkline=false${authParam}`;
-    
-    console.log(`Fetching ${platform} tokens from: ${url.replace(COINGECKO_API_KEY, '***')}`);
-    const response = await fetch(url);
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`HTTP error! status: ${response.status} - ${err}`);
-    }
-    const data = await response.json();
-    
-    if (!Array.isArray(data)) {
-      throw new Error(`Invalid response format: ${JSON.stringify(data)}`);
-    }
+    const pages = [1, 2];
+    const allTokens = [];
 
-    return data.map((coin: any) => {
+    for (const page of pages) {
+      const url = `${baseUrl}/coins/markets?vs_currency=usd&category=${platform === 'ethereum' ? 'ethereum-ecosystem' : 'polygon-ecosystem'}&order=market_cap_desc&per_page=250&page=${page}&sparkline=false${authParam}`;
+      console.log(`Fetching ${platform} page ${page} from: ${url.replace(COINGECKO_API_KEY, '***')}`);
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        const err = await response.text();
+        console.error(`Page ${page} error: ${response.status} - ${err}`);
+        continue;
+      }
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        allTokens.push(...data);
+      }
+    }
+    
+    const mapped = allTokens.map((coin: any) => {
       const address = coin.platforms?.[platform === 'ethereum' ? 'ethereum' : 'polygon-pos'];
       if (!address) return null;
       
@@ -32,11 +35,14 @@ async function fetchTokens(chainId: number, platform: string, limit: number) {
         address: address.toLowerCase(),
         name: coin.name,
         symbol: coin.symbol.toUpperCase(),
-        decimals: 18, // Simplified, will be updated on-chain
+        decimals: 18,
         chainId,
         logoURI: coin.image
       };
     }).filter((t: any) => t !== null);
+
+    console.log(`Mapped ${mapped.length} tokens for ${platform}`);
+    return mapped.slice(0, limit);
   } catch (error) {
     console.error(`Error fetching ${platform} tokens:`, error);
     return [];
