@@ -12,11 +12,11 @@ async function fetchCMC(chainId: number) {
     const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest', {
       params: {
         limit: 1000, 
-        convert: 'USD',
-        aux: 'platform,symbol,name'
+        convert: 'USD'
       },
       headers: {
-        'X-CMC_PRO_API_KEY': CMC_API_KEY
+        'X-CMC_PRO_API_KEY': CMC_API_KEY,
+        'Accept': 'application/json'
       }
     });
 
@@ -41,16 +41,16 @@ async function fetchCMC(chainId: number) {
 async function fetchCG(platform: string) {
   const tokens = [];
   const baseUrl = COINGECKO_API_KEY ? 'https://pro-api.coingecko.com/api/v3' : 'https://api.coingecko.com/api/v3';
-  const auth = COINGECKO_API_KEY ? (COINGECKO_API_KEY.startsWith('CG-') ? `&x_cg_pro_api_key=${COINGECKO_API_KEY}` : `&x_cg_demo_api_key=${COINGECKO_API_KEY}`) : "";
+  const headers = COINGECKO_API_KEY ? (COINGECKO_API_KEY.startsWith('CG-') ? { 'x-cg-pro-api-key': COINGECKO_API_KEY } : { 'x-cg-demo-api-key': COINGECKO_API_KEY }) : {};
   
   try {
     console.log(`Fetching top tokens for ${platform} from CoinGecko...`);
     for (let page = 1; page <= 5; page++) {
-      const url = `${baseUrl}/coins/markets?vs_currency=usd&category=${platform}-ecosystem&order=market_cap_desc&per_page=250&page=${page}${auth}`;
-      const res = await fetch(url);
+      const url = `${baseUrl}/coins/markets?vs_currency=usd&category=${platform}-ecosystem&order=market_cap_desc&per_page=250&page=${page}`;
+      const res = await fetch(url, { headers });
       if (res.ok) {
         const data = await res.json();
-        if (data.length === 0) break;
+        if (!data || data.length === 0) break;
         tokens.push(...data.map((c: any) => {
           const addr = (c.platforms?.[platform === 'ethereum' ? 'ethereum' : 'polygon-pos'] || '').toLowerCase();
           if (!addr) return null;
@@ -87,15 +87,39 @@ export async function updateTokenLists() {
   const dedupe = (list1: any[], list2: any[]) => {
     const combined = [...list1, ...list2];
     const seen = new Set();
-    return combined.filter(t => {
+    
+    // Ensure native tokens and USDC are always present if not found
+    const result = combined.filter(t => {
       if (!t.address || seen.has(t.address)) return false;
       seen.add(t.address);
       return true;
     }).sort((a,b) => (b.marketCap || 0) - (a.marketCap || 0)).slice(0, 250);
+
+    return result;
   };
 
   const ethereum = dedupe(ethCMC, ethCG);
   const polygon = dedupe(polCMC, polCG);
+
+  // Fallback to ensure we have at least defaults if API fails
+  if (ethereum.length === 0) {
+    ethereum.push({
+      address: "0x0000000000000000000000000000000000000000",
+      symbol: "ETH",
+      name: "Ethereum",
+      decimals: 18,
+      logoURI: "https://assets.coingecko.com/coins/images/279/large/ethereum.png"
+    });
+  }
+  if (polygon.length === 0) {
+    polygon.push({
+      address: "0x0000000000000000000000000000000000001010",
+      symbol: "MATIC",
+      name: "Polygon",
+      decimals: 18,
+      logoURI: "https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png"
+    });
+  }
 
   const tokensData = { ethereum, polygon };
   
