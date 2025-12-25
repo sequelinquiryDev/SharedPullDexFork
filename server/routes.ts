@@ -32,6 +32,17 @@ const iconCache = new Map<string, { url: string; expires: number }>();
 const iconFetchingInFlight = new Map<string, Promise<string>>();
 const ICON_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+// Analytics caching with 1-hour TTL
+interface CachedAnalytics {
+  data: OnChainAnalytics;
+  timestamp: number;
+}
+const analyticsCache = new Map<string, CachedAnalytics>();
+const ANALYTICS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const watchedTokens = new Set<string>();
+const analyticsSubscriptions = new Map<string, Set<WebSocket>>();
+const analyticsFetchingLocks = new Map<string, Promise<any>>();
+
 const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: string; wethAddr: string; factories: string[] }> = {
   1: {
     rpc: process.env.VITE_ETH_RPC_URL || "https://eth.llamarpc.com",
@@ -79,44 +90,133 @@ interface OnChainAnalytics {
   timestamp: number;
 }
 
-// Fetch 24h onchain analytics for token
+// Fetch 24h onchain analytics for token with 1-hour caching
 async function getOnChainAnalytics(address: string, chainId: number): Promise<OnChainAnalytics | null> {
   const cacheKey = `analytics-${chainId}-${address.toLowerCase()}`;
-  const cached = onChainCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached as any;
+  
+  // Check cache first (1-hour TTL)
+  const cached = analyticsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < ANALYTICS_CACHE_TTL) {
+    return cached.data;
   }
 
+  // Use single-flight pattern to prevent thundering herd
+  if (analyticsFetchingLocks.has(cacheKey)) {
+    return await analyticsFetchingLocks.get(cacheKey)!;
+  }
+
+  const promise = (async () => {
+    try {
+      // Generate realistic mock 24h analytics (1-hour intervals: 24 data points)
+      const priceHistory: number[] = [];
+      let currentPrice = 100;
+      const change24h = (Math.random() - 0.5) * 50; // -25 to +25%
+      const targetPrice = 100 * (1 + change24h / 100);
+      const volatility = Math.abs(change24h) * 0.3;
+      
+      for (let i = 0; i < 24; i++) {
+        const noise = (Math.random() - 0.5) * volatility;
+        const trend = (targetPrice - currentPrice) * 0.15;
+        currentPrice = Math.max(currentPrice + trend + noise, 1);
+        priceHistory.push(currentPrice);
+      }
+      
+      const result: OnChainAnalytics = {
+        change24h,
+        volume24h: Math.random() * 10000000,
+        marketCap: Math.random() * 1000000000,
+        priceHistory,
+        timestamp: Date.now()
+      };
+      
+      // Store in analytics cache
+      analyticsCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      
+      // Broadcast to all subscribers
+      const subs = analyticsSubscriptions.get(cacheKey);
+      if (subs && subs.size > 0) {
+        const msg = JSON.stringify({ type: 'analytics', data: result, address, chainId });
+        subs.forEach(ws => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+        });
+      }
+      
+      return result;
+    } catch (e) {
+      console.error('Analytics fetch error:', e);
+      return null;
+    } finally {
+      analyticsFetchingLocks.delete(cacheKey);
+    }
+  })();
+
+  analyticsFetchingLocks.set(cacheKey, promise);
+  return await promise;
+}
+
+// Load all tokens from JSON and add to watched set
+function loadTokensForWatching() {
   try {
-    // Generate realistic mock 24h analytics (1-hour intervals: 24 data points)
-    const priceHistory: number[] = [];
-    let currentPrice = 100;
-    const change24h = (Math.random() - 0.5) * 50; // -25 to +25%
-    const targetPrice = 100 * (1 + change24h / 100);
-    const volatility = Math.abs(change24h) * 0.3;
+    const tokensPath = path.join(process.cwd(), 'client', 'src', 'lib', 'tokens.json');
+    const tokensData = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
     
-    for (let i = 0; i < 24; i++) {
-      const progressRatio = i / 24;
-      const noise = (Math.random() - 0.5) * volatility;
-      const trend = (targetPrice - currentPrice) * 0.15;
-      currentPrice = Math.max(currentPrice + trend + noise, 1);
-      priceHistory.push(currentPrice);
+    // Add Ethereum tokens
+    if (tokensData.ethereum && Array.isArray(tokensData.ethereum)) {
+      tokensData.ethereum.forEach((token: any) => {
+        if (token.address) {
+          watchedTokens.add(`1-${token.address.toLowerCase()}`);
+        }
+      });
     }
     
-    const result: OnChainAnalytics = {
-      change24h,
-      volume24h: Math.random() * 10000000,
-      marketCap: Math.random() * 1000000000,
-      priceHistory,
-      timestamp: Date.now()
-    };
+    // Add Polygon tokens
+    if (tokensData.polygon && Array.isArray(tokensData.polygon)) {
+      tokensData.polygon.forEach((token: any) => {
+        if (token.address) {
+          watchedTokens.add(`137-${token.address.toLowerCase()}`);
+        }
+      });
+    }
     
-    onChainCache.set(cacheKey, result as any);
-    return result;
+    console.log(`[Analytics] Loaded ${watchedTokens.size} tokens for watching`);
   } catch (e) {
-    console.error('Analytics fetch error:', e);
-    return null;
+    console.error('[Analytics] Error loading tokens:', e);
   }
+}
+
+// Refresh analytics for all watched tokens and broadcast to subscribers
+async function refreshAllAnalytics() {
+  const tokenArray = Array.from(watchedTokens);
+  console.log(`[Analytics] Refreshing ${tokenArray.length} tokens...`);
+  
+  for (const tokenKey of tokenArray) {
+    const [chainIdStr, address] = tokenKey.split('-');
+    const chainId = Number(chainIdStr);
+    
+    // Only refresh if we have subscribers or it's from the initial token list
+    const cacheKey = `analytics-${chainId}-${address}`;
+    const hasSubs = analyticsSubscriptions.has(cacheKey);
+    const cached = analyticsCache.get(cacheKey);
+    const isExpired = !cached || Date.now() - cached.timestamp >= ANALYTICS_CACHE_TTL;
+    
+    if (hasSubs || isExpired) {
+      await getOnChainAnalytics(address, chainId);
+    }
+  }
+  
+  console.log('[Analytics] Refresh complete');
+}
+
+// Start automatic refresh every 1 hour
+function startAnalyticsRefreshTimer() {
+  // Initial load
+  loadTokensForWatching();
+  refreshAllAnalytics();
+  
+  // Refresh every 1 hour
+  setInterval(() => {
+    refreshAllAnalytics();
+  }, ANALYTICS_CACHE_TTL);
 }
 
 async function fetchPriceAggregated(address: string, chainId: number) {
@@ -138,11 +238,15 @@ async function fetchPriceAggregated(address: string, chainId: number) {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   updateTokenLists().catch(console.error);
+  
+  // Start analytics caching and refresh timer
+  startAnalyticsRefreshTimer();
 
   const wss = new WebSocketServer({ server: httpServer, path: '/api/ws/prices' });
 
   wss.on('connection', (ws) => {
     let currentSub: string | null = null;
+    let currentAnalyticsSub: string | null = null;
     ws.on('message', async (msg) => {
       try {
         const data = JSON.parse(msg.toString());
@@ -153,12 +257,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           if (!activeSubscriptions.has(key)) activeSubscriptions.set(key, { clients: new Set(), lastSeen: Date.now() });
           activeSubscriptions.get(key)!.clients.add(ws);
           activeSubscriptions.get(key)!.lastSeen = Date.now();
+          
+          // Also subscribe to analytics for this token
+          const analyticsKey = `analytics-${data.chainId}-${data.address.toLowerCase()}`;
+          if (currentAnalyticsSub && currentAnalyticsSub !== analyticsKey) {
+            analyticsSubscriptions.get(currentAnalyticsSub)?.delete(ws);
+          }
+          currentAnalyticsSub = analyticsKey;
+          if (!analyticsSubscriptions.has(analyticsKey)) {
+            analyticsSubscriptions.set(analyticsKey, new Set());
+            watchedTokens.add(`${data.chainId}-${data.address.toLowerCase()}`);
+          }
+          analyticsSubscriptions.get(analyticsKey)!.add(ws);
+          
           const price = await fetchPriceAggregated(data.address, data.chainId);
           if (price && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'price', data: price, address: data.address, chainId: data.chainId }));
+          
+          // Send latest analytics
+          const analytics = await getOnChainAnalytics(data.address, data.chainId);
+          if (analytics && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'analytics', data: analytics, address: data.address, chainId: data.chainId }));
+          }
         }
       } catch (e) {}
     });
-    ws.on('close', () => { if (currentSub) activeSubscriptions.get(currentSub)?.clients.delete(ws); });
+    ws.on('close', () => {
+      if (currentSub) activeSubscriptions.get(currentSub)?.clients.delete(ws);
+      if (currentAnalyticsSub) analyticsSubscriptions.get(currentAnalyticsSub)?.delete(ws);
+    });
   });
 
   setInterval(() => {

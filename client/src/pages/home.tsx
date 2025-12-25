@@ -99,7 +99,7 @@ export default function Home() {
     return fromChainId !== toChainId;
   };
 
-  // Fetch 24h onchain analytics for tokens
+  // Fetch 24h onchain analytics for tokens (initial load only, server sends updates via WebSocket)
   useEffect(() => {
     const fetchAnalytics = async () => {
       if (fromToken) {
@@ -123,6 +123,38 @@ export default function Home() {
     };
     fetchAnalytics();
   }, [fromToken, toToken, chain]);
+
+  // Listen for analytics updates from server WebSocket
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'analytics') {
+          const { address, chainId, data } = msg;
+          if (fromToken && fromToken.address.toLowerCase() === address.toLowerCase() && getTokenChainId(fromToken) === chainId) {
+            setFromChange24h(data.change24h);
+            setFromVolume24h(data.volume24h);
+            setFromMarketCap(data.marketCap);
+            setFromPriceHistory(data.priceHistory);
+          }
+          if (toToken && toToken.address.toLowerCase() === address.toLowerCase() && getTokenChainId(toToken) === chainId) {
+            setToChange24h(data.change24h);
+            setToVolume24h(data.volume24h);
+            setToMarketCap(data.marketCap);
+            setToPriceHistory(data.priceHistory);
+          }
+        }
+      } catch (e) {}
+    };
+
+    const wsPriceConn = (window as any).__wsPriceConn;
+    if (wsPriceConn && wsPriceConn.addEventListener) {
+      wsPriceConn.addEventListener('message', handleMessage);
+      return () => {
+        wsPriceConn.removeEventListener('message', handleMessage);
+      };
+    }
+  }, [fromToken, toToken]);
 
   // Get user balance for from token (use token's chainId in BRG mode)
   const fromTokenChainId = (() => {
