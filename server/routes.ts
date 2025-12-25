@@ -28,6 +28,10 @@ const SUBSCRIPTION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 const activeSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number }>();
 const priceFetchingLocks = new Map<string, Promise<any>>();
 
+const iconCache = new Map<string, { url: string; expires: number }>();
+const iconFetchingInFlight = new Map<string, Promise<string>>();
+const ICON_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: string; wethAddr: string; factories: string[] }> = {
   1: {
     rpc: process.env.VITE_ETH_RPC_URL || "https://eth.llamarpc.com",
@@ -153,6 +157,46 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) {
       res.status(404).send("Token not found on-chain");
     }
+  });
+
+  app.get("/api/icon", async (req, res) => {
+    const { address, chainId } = req.query;
+    if (!address || !chainId) return res.status(400).json({ error: "Missing params" });
+    
+    const cid = Number(chainId);
+    const addr = (address as string).toLowerCase();
+    const cacheKey = `${cid}-${addr}`;
+    
+    const cached = iconCache.get(cacheKey);
+    if (cached && Date.now() < cached.expires) {
+      return res.json({ url: cached.url });
+    }
+    
+    if (iconFetchingInFlight.has(cacheKey)) {
+      const url = await iconFetchingInFlight.get(cacheKey)!;
+      return res.json({ url });
+    }
+    
+    const promise = (async () => {
+      const fallbackUrl = `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${cid === 1 ? 'ethereum' : 'polygon'}/assets/${addr}/logo.png`;
+      try {
+        const response = await fetch(fallbackUrl, { method: 'HEAD', timeout: 3000 });
+        if (response.ok) {
+          iconCache.set(cacheKey, { url: fallbackUrl, expires: Date.now() + ICON_CACHE_TTL });
+          return fallbackUrl;
+        }
+      } catch (e) {}
+      
+      const coingeckoUrl = `https://coin-images.coingecko.com/coins/images/`;
+      iconCache.set(cacheKey, { url: coingeckoUrl, expires: Date.now() + ICON_CACHE_TTL });
+      return coingeckoUrl;
+    })();
+    
+    iconFetchingInFlight.set(cacheKey, promise);
+    const url = await promise;
+    iconFetchingInFlight.delete(cacheKey);
+    
+    res.json({ url });
   });
 
   return httpServer;

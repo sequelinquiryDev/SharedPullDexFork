@@ -16,12 +16,12 @@ interface ExtendedToken extends Token {
   chainId?: number;
 }
 
-// ETH chain: WETH -> USDT (verified contract addresses)
+// ETH chain: WETH -> ETH (verified contract addresses)
 // WETH: https://etherscan.io/token/0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2
-// USDT: https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7
+// ETH: Native coin (0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee)
 const ETHEREUM_DEFAULTS = {
   fromToken: '0xc02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH Ethereum (verified mainnet)
-  toToken: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT Ethereum (verified mainnet)
+  toToken: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', // ETH Ethereum (native coin)
 };
 
 // POL chain: USDC.e (bridged) -> WETH (verified contract addresses)

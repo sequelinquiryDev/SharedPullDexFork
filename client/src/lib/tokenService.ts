@@ -26,6 +26,8 @@ export interface TokenStats {
 const tokenListByChain = new Map<number, Token[]>();
 const tokenMapByChain = new Map<number, Map<string, Token>>();
 const statsMapByAddressChain = new Map<number, Map<string, TokenStats>>();
+const iconCache = new Map<string, { url: string; expires: number }>();
+const iconFetchingInFlight = new Map<string, Promise<string>>();
 
 const DARK_SVG_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxNCIgY3k9IjE0IiByPSIxNCIgZmlsbD0iIzJBMkEzQSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjODg4IiBmb250LXNpemU9IjEyIj4/PC90ZXh0Pjwvc3ZnPg==';
 
@@ -181,6 +183,39 @@ export async function getTokenByAddress(address: string, chainId?: number): Prom
     }
   } catch {}
   return null;
+}
+
+export async function fetchTokenIcon(token: Token, chainId?: number): Promise<string> {
+  const cid = chainId ?? config.chainId;
+  const addr = low(token.address);
+  const cacheKey = `${cid}-${addr}`;
+  
+  const cached = iconCache.get(cacheKey);
+  if (cached && Date.now() < cached.expires) {
+    return cached.url;
+  }
+  
+  if (iconFetchingInFlight.has(cacheKey)) {
+    return iconFetchingInFlight.get(cacheKey)!;
+  }
+  
+  const promise = (async () => {
+    try {
+      const res = await fetch(`/api/icon?address=${addr}&chainId=${cid}`);
+      if (res.ok) {
+        const data = await res.json();
+        const url = data.url || token.logoURI || getPlaceholderImage();
+        iconCache.set(cacheKey, { url, expires: Date.now() + 24 * 60 * 60 * 1000 });
+        iconFetchingInFlight.delete(cacheKey);
+        return url;
+      }
+    } catch (e) {}
+    iconFetchingInFlight.delete(cacheKey);
+    return token.logoURI || getPlaceholderImage();
+  })();
+  
+  iconFetchingInFlight.set(cacheKey, promise);
+  return promise;
 }
 
 export function getTokenLogoUrl(token: Token, chainId?: number): string {
