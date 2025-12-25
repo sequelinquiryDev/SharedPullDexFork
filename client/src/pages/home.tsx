@@ -248,81 +248,71 @@ export default function Home() {
       await loadTokensForChain(1);
       await loadTokensForChain(137);
       
-      const ethTokenMap = getTokenMap(1);
+      const ethTokenList = getTokenList(1);
+      const polTokenList = getTokenList(137);
       const polTokenMap = getTokenMap(137);
       
-      // Default: Ethereum WETH -> Polygon WETH
-      const fromTokenAddr = low(ETHEREUM_DEFAULTS.fromToken);
-      const toTokenAddr = low(POLYGON_DEFAULTS.toToken);
-      
-      let newFromToken = ethTokenMap.get(fromTokenAddr);
-      let newToToken = polTokenMap.get(toTokenAddr);
-      
-      // Fallback: Native ETH
-      if (!newFromToken) {
-        newFromToken = {
-          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-          symbol: 'ETH',
-          name: 'Ethereum',
-          decimals: 18,
-          logoURI: 'https://assets.coingecko.com/coins/images/279/small/ethereum.png',
-          chainId: 1,
-        } as ExtendedToken;
-        console.log('[BRG Defaults] Created native ETH token on Ethereum');
-      } else {
-        newFromToken = { ...newFromToken, chainId: 1 } as ExtendedToken;
+      // Pick random from token from Ethereum list
+      let newFromToken: ExtendedToken | null = null;
+      if (ethTokenList.length > 0) {
+        const randomIdx = Math.floor(Math.random() * ethTokenList.length);
+        newFromToken = { ...ethTokenList[randomIdx], chainId: 1 } as ExtendedToken;
       }
       
-      // Fallback: Polygon WETH
-      if (!newToToken) {
-        newToToken = {
-          address: '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619',
-          symbol: 'WETH',
-          name: 'Wrapped Ether',
-          decimals: 18,
-          logoURI: 'https://assets.coingecko.com/coins/images/2518/small/weth.png',
-          chainId: 137,
-        } as ExtendedToken;
-        console.log('[BRG Defaults] Created WETH token on Polygon');
-      } else {
+      // Default: POL token for Polygon
+      const polAddr = low('0x455e53cbb86018ac2b8092fdcd39d8444affc3f6');
+      let newToToken = polTokenMap.get(polAddr);
+      if (!newToToken && polTokenList.length > 0) {
+        // Fallback: find USDT in polygon list
+        newToToken = polTokenList.find(t => t.symbol === 'USDT');
+      }
+      if (newToToken) {
         newToToken = { ...newToToken, chainId: 137 } as ExtendedToken;
       }
       
-      setFromToken(newFromToken);
-      setToToken(newToToken);
+      if (newFromToken) setFromToken(newFromToken);
+      if (newToToken) setToToken(newToToken);
       return;
     }
     
     let targetChainId: number;
-    let defaults: any;
+    let primaryTokenAddr: string;
+    let fallbackSymbol: string;
     
     if (chainType === 'ETH') {
       targetChainId = 1;
-      defaults = ETHEREUM_DEFAULTS;
+      primaryTokenAddr = low('0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'); // ETH
+      fallbackSymbol = 'USDT';
     } else if (chainType === 'POL') {
       targetChainId = 137;
-      defaults = POLYGON_DEFAULTS;
+      primaryTokenAddr = low('0x455e53cbb86018ac2b8092fdcd39d8444affc3f6'); // POL
+      fallbackSymbol = 'USDT';
     } else {
       return;
     }
     
     await loadTokensForChain(targetChainId);
+    const tokenList = getTokenList(targetChainId);
     const tokenMap = getTokenMap(targetChainId);
     
-    const fromTokenAddr = low(defaults.fromToken);
-    const toTokenAddr = low(defaults.toToken);
+    // Random token from local file for "from"
+    let newFromToken: ExtendedToken | null = null;
+    if (tokenList.length > 0) {
+      const randomIdx = Math.floor(Math.random() * tokenList.length);
+      newFromToken = { ...tokenList[randomIdx], chainId: targetChainId } as ExtendedToken;
+    }
     
-    let newFromToken = tokenMap.get(fromTokenAddr);
-    let newToToken = tokenMap.get(toTokenAddr);
-    
-    if (newFromToken) {
-      newFromToken = { ...newFromToken, chainId: targetChainId } as ExtendedToken;
-      setFromToken(newFromToken);
+    // Primary token for "to", fallback to USDT
+    let newToToken = tokenMap.get(primaryTokenAddr);
+    if (!newToToken) {
+      newToToken = tokenList.find(t => t.symbol === fallbackSymbol);
     }
     if (newToToken) {
       newToToken = { ...newToToken, chainId: targetChainId } as ExtendedToken;
-      setToToken(newToToken);
     }
+    
+    if (newFromToken) setFromToken(newFromToken);
+    if (newToToken) setToToken(newToToken);
   }, []);
 
   useEffect(() => {
