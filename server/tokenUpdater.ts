@@ -63,15 +63,23 @@ async function fetchTokens(chainId: number, platform: string, limit: number) {
 export async function updateTokenLists() {
   console.log("Updating token lists (450 per chain)...");
   const ethTokens = await fetchTokens(1, "ethereum", 450);
+  
+  // Add delay to avoid rate limiting
+  await new Promise(r => setTimeout(r, 2000));
+  
   const polTokens = await fetchTokens(137, "polygon-pos", 450);
   
   if (ethTokens.length > 0) {
     fs.writeFileSync(path.join(process.cwd(), "eth-tokens.json"), JSON.stringify(ethTokens, null, 2));
     console.log(`Saved ${ethTokens.length} ETH tokens`);
+  } else {
+    console.warn("No ETH tokens fetched, keeping existing file if available");
   }
   
   if (polTokens.length > 0) {
     fs.writeFileSync(path.join(process.cwd(), "polygon-tokens.json"), JSON.stringify(polTokens, null, 2));
     console.log(`Saved ${polTokens.length} POL tokens`);
+  } else {
+    console.warn("No Polygon tokens fetched, keeping existing file if available");
   }
 }

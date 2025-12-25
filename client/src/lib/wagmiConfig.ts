@@ -42,7 +42,7 @@ export const wagmiConfig = createConfig({
   chains: [polygon, mainnet],
   connectors: [
     injected(),
-    walletConnect({
+    ...(projectId ? [walletConnect({
       projectId,
       metadata: {
         name: config.siteName,
@@ -51,7 +51,7 @@ export const wagmiConfig = createConfig({
         icons: [typeof window !== 'undefined' ? `${window.location.origin}/logo.gif` : '/logo.gif'],
       },
       showQrModal: true,
-    }),
+    })] : []),
   ],
   transports: {
     // SECURITY: Use server-proxied RPC endpoints - custom RPC URLs with API keys are protected server-side
