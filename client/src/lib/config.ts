@@ -1,6 +1,6 @@
 // Load default tokens for initial selection
-import ethTokens from '../../public/eth-tokens.json';
-import polTokens from '../../public/polygon-tokens.json';
+import ethTokens from '../assets/tokens/eth-tokens.json';
+import polTokens from '../assets/tokens/polygon-tokens.json';
 
 const defaultEth = (ethTokens as any[]).find((t: any) => t.symbol === 'ETH' || t.symbol === 'WETH') || ethTokens[0];
 const defaultPol = (polTokens as any[]).find((t: any) => t.symbol === 'MATIC' || t.symbol === 'POL') || polTokens[0];
