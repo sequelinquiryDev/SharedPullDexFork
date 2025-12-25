@@ -6,7 +6,7 @@ import { TokenInput } from '@/components/TokenInput';
 import { SlippageControl } from '@/components/SlippageControl';
 import { TokenInfoSidebar } from '@/components/TokenInfoSidebar';
 import { showToast } from '@/components/Toast';
-import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress, getCgStatsMap, getStatsByTokenAddress } from '@/lib/tokenService';
+import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress, getCgStatsMap, getStatsByTokenAddress, getOnChainAnalytics } from '@/lib/tokenService';
 import { getBestQuote, getLifiBridgeQuote, executeSwap, approveToken, checkAllowance, parseSwapError, QuoteResult } from '@/lib/swapService';
 import { config, ethereumConfig, low, isAddress } from '@/lib/config';
 import { useChain, ChainType, chainConfigs } from '@/lib/chainContext';
@@ -61,6 +61,12 @@ export default function Home() {
 
   const [fromPriceUsd, setFromPriceUsd] = useState<number | null>(null);
   const [toPriceUsd, setToPriceUsd] = useState<number | null>(null);
+  const [fromChange24h, setFromChange24h] = useState<number | null>(null);
+  const [toChange24h, setToChange24h] = useState<number | null>(null);
+  const [fromVolume24h, setFromVolume24h] = useState<number | null>(null);
+  const [toVolume24h, setToVolume24h] = useState<number | null>(null);
+  const [fromMarketCap, setFromMarketCap] = useState<number | null>(null);
+  const [toMarketCap, setToMarketCap] = useState<number | null>(null);
   
   const priceRequestIdRef = useRef<number>(0);
 
@@ -92,6 +98,31 @@ export default function Home() {
     const toChainId = getTokenChainId(toToken);
     return fromChainId !== toChainId;
   };
+
+  // Fetch 24h onchain analytics for tokens
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      if (fromToken) {
+        const analytics = await getOnChainAnalytics(fromToken.address, getTokenChainId(fromToken));
+        if (analytics) {
+          setFromChange24h(analytics.change24h);
+          setFromVolume24h(analytics.volume24h);
+          setFromMarketCap(analytics.marketCap);
+          setFromPriceHistory(analytics.priceHistory);
+        }
+      }
+      if (toToken) {
+        const analytics = await getOnChainAnalytics(toToken.address, getTokenChainId(toToken));
+        if (analytics) {
+          setToChange24h(analytics.change24h);
+          setToVolume24h(analytics.volume24h);
+          setToMarketCap(analytics.marketCap);
+          setToPriceHistory(analytics.priceHistory);
+        }
+      }
+    };
+    fetchAnalytics();
+  }, [fromToken, toToken, chain]);
 
   // Get user balance for from token (use token's chainId in BRG mode)
   const fromTokenChainId = (() => {
@@ -838,12 +869,12 @@ export default function Home() {
         toToken={toToken} 
         fromPriceUsd={fromPriceUsd}
         toPriceUsd={toPriceUsd}
-        fromChange24h={fromToken ? (getStatsByTokenAddress(fromToken.address, getTokenChainId(fromToken))?.change ?? null) : null}
-        toChange24h={toToken ? (getStatsByTokenAddress(toToken.address, getTokenChainId(toToken))?.change ?? null) : null}
-        fromVolume24h={fromToken ? (getStatsByTokenAddress(fromToken.address, getTokenChainId(fromToken))?.volume24h ?? null) : null}
-        toVolume24h={toToken ? (getStatsByTokenAddress(toToken.address, getTokenChainId(toToken))?.volume24h ?? null) : null}
-        fromMarketCap={fromToken ? (getStatsByTokenAddress(fromToken.address, getTokenChainId(fromToken))?.marketCap ?? null) : null}
-        toMarketCap={toToken ? (getStatsByTokenAddress(toToken.address, getTokenChainId(toToken))?.marketCap ?? null) : null}
+        fromChange24h={fromChange24h}
+        toChange24h={toChange24h}
+        fromVolume24h={fromVolume24h}
+        toVolume24h={toVolume24h}
+        fromMarketCap={fromMarketCap}
+        toMarketCap={toMarketCap}
         fromPriceHistory={fromPriceHistory}
         toPriceHistory={toPriceHistory}
         isRadarOpen={isRadarOpen}

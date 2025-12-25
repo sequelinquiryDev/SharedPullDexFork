@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Token } from '@/lib/tokenService';
 import { formatUSD } from '@/lib/config';
-import { SiCoinmarketcap } from 'react-icons/si';
 
 interface TokenInfoSidebarProps {
   fromToken: Token | null;
@@ -305,25 +304,6 @@ export function TokenInfoSidebar({
 }: TokenInfoSidebarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLDivElement>(null);
-  const [currentSource, setCurrentSource] = useState<'cmc' | 'coingecko'>('cmc');
-  const [timeInCycle, setTimeInCycle] = useState(0);
-
-  // Track which source is active and time in 2-minute cycle
-  useEffect(() => {
-    const updateSource = () => {
-      const now = Date.now();
-      const cycleTime = now % 120000; // 2 minutes
-      setTimeInCycle(Math.floor(cycleTime / 1000)); // Seconds in current cycle
-      
-      // Alternate every 2 minutes
-      const cycles = Math.floor(now / 120000);
-      setCurrentSource(cycles % 2 === 0 ? 'cmc' : 'coingecko');
-    };
-    
-    updateSource();
-    const interval = setInterval(updateSource, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   const hasTokens = fromToken || toToken;
 
@@ -399,23 +379,7 @@ export function TokenInfoSidebar({
                 <div>Vol: {fromVolume24h !== null && fromVolume24h !== undefined ? (fromVolume24h > 1000000 ? `$${(fromVolume24h / 1000000).toFixed(1)}M` : `$${(fromVolume24h / 1000).toFixed(0)}K`) : <LoadingPulse width={30} height={8} />}</div>
                 <div>Cap: {fromMarketCap !== null && fromMarketCap !== undefined ? (fromMarketCap > 1000000 ? `$${(fromMarketCap / 1000000).toFixed(1)}M` : `$${(fromMarketCap / 1000).toFixed(0)}K`) : <LoadingPulse width={30} height={8} />}</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                <Sparkline trend={(fromChange24h ?? 0) >= 0 ? 'up' : 'down'} change={fromChange24h} isLoading={fromPriceUsd === null} priceHistory={fromPriceHistory} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '8px', opacity: 0.7 }}>
-                  <div title={currentSource === 'cmc' ? 'CoinMarketCap' : 'CoinGecko'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '12px', height: '12px' }}>
-                    {currentSource === 'cmc' ? (
-                      <SiCoinmarketcap size={12} style={{ color: '#17f0cb' }} />
-                    ) : (
-                      <svg viewBox="0 0 500 500" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="250" cy="250" r="245" fill="#8DC63F"/>
-                        <path d="M250 120c71.6 0 130 58.4 130 130s-58.4 130-130 130-130-58.4-130-130 58.4-130 130-130z" fill="#FFFFFF"/>
-                        <path d="M250 160c50.7 0 92 41.3 92 92s-41.3 92-92 92-92-41.3-92-92 41.3-92 92-92z" fill="#8DC63F"/>
-                      </svg>
-                    )}
-                  </div>
-                  <span>{timeInCycle}s</span>
-                </div>
-              </div>
+              <Sparkline trend={(fromChange24h ?? 0) >= 0 ? 'up' : 'down'} change={fromChange24h} isLoading={fromPriceUsd === null} priceHistory={fromPriceHistory} />
             </div>
           )}
           {toToken && (
@@ -437,23 +401,7 @@ export function TokenInfoSidebar({
                 <div>Vol: {toVolume24h !== null && toVolume24h !== undefined ? (toVolume24h > 1000000 ? `$${(toVolume24h / 1000000).toFixed(1)}M` : `$${(toVolume24h / 1000).toFixed(0)}K`) : <LoadingPulse width={30} height={8} />}</div>
                 <div>Cap: {toMarketCap !== null && toMarketCap !== undefined ? (toMarketCap > 1000000 ? `$${(toMarketCap / 1000000).toFixed(1)}M` : `$${(toMarketCap / 1000).toFixed(0)}K`) : <LoadingPulse width={30} height={8} />}</div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                <Sparkline trend={(toChange24h ?? 0) >= 0 ? 'up' : 'down'} change={toChange24h} isLoading={toPriceUsd === null} priceHistory={toPriceHistory} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '8px', opacity: 0.7 }}>
-                  <div title={currentSource === 'cmc' ? 'CoinMarketCap' : 'CoinGecko'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '12px', height: '12px' }}>
-                    {currentSource === 'cmc' ? (
-                      <SiCoinmarketcap size={12} style={{ color: '#17f0cb' }} />
-                    ) : (
-                      <svg viewBox="0 0 500 500" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
-                        <circle cx="250" cy="250" r="245" fill="#8DC63F"/>
-                        <path d="M250 120c71.6 0 130 58.4 130 130s-58.4 130-130 130-130-58.4-130-130 58.4-130 130-130z" fill="#FFFFFF"/>
-                        <path d="M250 160c50.7 0 92 41.3 92 92s-41.3 92-92 92-92-41.3-92-92 41.3-92 92-92z" fill="#8DC63F"/>
-                      </svg>
-                    )}
-                  </div>
-                  <span>{timeInCycle}s</span>
-                </div>
-              </div>
+              <Sparkline trend={(toChange24h ?? 0) >= 0 ? 'up' : 'down'} change={toChange24h} isLoading={toPriceUsd === null} priceHistory={toPriceHistory} />
             </div>
           )}
         </div>

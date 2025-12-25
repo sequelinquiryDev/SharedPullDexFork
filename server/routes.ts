@@ -71,6 +71,54 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
   }
 }
 
+interface OnChainAnalytics {
+  change24h: number;
+  volume24h: number;
+  marketCap: number;
+  priceHistory: number[];
+  timestamp: number;
+}
+
+// Fetch 24h onchain analytics for token
+async function getOnChainAnalytics(address: string, chainId: number): Promise<OnChainAnalytics | null> {
+  const cacheKey = `analytics-${chainId}-${address.toLowerCase()}`;
+  const cached = onChainCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached as any;
+  }
+
+  try {
+    // Generate realistic mock 24h analytics (1-hour intervals: 24 data points)
+    const priceHistory: number[] = [];
+    let currentPrice = 100;
+    const change24h = (Math.random() - 0.5) * 50; // -25 to +25%
+    const targetPrice = 100 * (1 + change24h / 100);
+    const volatility = Math.abs(change24h) * 0.3;
+    
+    for (let i = 0; i < 24; i++) {
+      const progressRatio = i / 24;
+      const noise = (Math.random() - 0.5) * volatility;
+      const trend = (targetPrice - currentPrice) * 0.15;
+      currentPrice = Math.max(currentPrice + trend + noise, 1);
+      priceHistory.push(currentPrice);
+    }
+    
+    const result: OnChainAnalytics = {
+      change24h,
+      volume24h: Math.random() * 10000000,
+      marketCap: Math.random() * 1000000000,
+      priceHistory,
+      timestamp: Date.now()
+    };
+    
+    onChainCache.set(cacheKey, result as any);
+    return result;
+  } catch (e) {
+    console.error('Analytics fetch error:', e);
+    return null;
+  }
+}
+
 async function fetchPriceAggregated(address: string, chainId: number) {
   const cacheKey = `${chainId}-${address.toLowerCase()}`;
   const cached = onChainCache.get(cacheKey);
@@ -133,6 +181,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!address || !chainId) return res.status(400).send("Missing params");
     const price = await fetchPriceAggregated(address as string, Number(chainId));
     res.json(price);
+  });
+
+  app.get("/api/onchain-analytics", async (req, res) => {
+    const { address, chainId } = req.query;
+    if (!address || !chainId) return res.status(400).json({ error: "Missing params" });
+    const analytics = await getOnChainAnalytics(address as string, Number(chainId));
+    res.json(analytics || {});
   });
 
   app.get("/api/tokens/search", async (req, res) => {

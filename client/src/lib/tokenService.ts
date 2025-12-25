@@ -224,4 +224,26 @@ export function getTokenLogoUrl(token: Token, chainId?: number): string {
   return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${cid === 1 ? 'ethereum' : 'polygon'}/assets/${low(token.address)}/logo.png`;
 }
 
+export interface OnChainAnalytics {
+  change24h: number;
+  volume24h: number;
+  marketCap: number;
+  priceHistory: number[];
+  timestamp: number;
+}
+
+export async function getOnChainAnalytics(address: string, chainId?: number): Promise<OnChainAnalytics | null> {
+  const cid = chainId ?? config.chainId;
+  const addr = low(address);
+  try {
+    const res = await fetch(`/api/onchain-analytics?address=${addr}&chainId=${cid}`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.error('Onchain analytics error:', e);
+  }
+  return null;
+}
+
 export async function refreshMarketData(chainId?: number): Promise<void> {}
