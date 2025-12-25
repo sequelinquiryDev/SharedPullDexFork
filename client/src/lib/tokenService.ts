@@ -47,53 +47,28 @@ function getChainConfigForId(chainId: number) {
 }
 
 
-// Load tokens from self-hosted JSON files (PRIMARY SOURCE)
+// Load tokens from local JSON (OFFICIAL HOST)
+import localTokens from './tokens.json';
+
 async function loadTokensFromSelfHosted(chainId: number): Promise<Token[] | null> {
-  try {
-    const filename = chainId === 1 ? 'eth-tokens.json' : 'polygon-tokens.json';
-    const response = await fetchWithTimeout(`/api/tokens/${filename}`, {}, 5000);
-    
-    if (!response.ok) {
-      console.log(`Self-hosted API /api/tokens/${filename} not found (${response.status}), trying root fallback...`);
-      // Use absolute URL for fallback to ensure it works from any page
-      const fallbackRes = await fetchWithTimeout(`${window.location.origin}/${filename}?v=${Date.now()}`, {}, 5000);
-      if (!fallbackRes.ok) {
-        console.error(`Fallback fetch failed for ${filename}: ${fallbackRes.status}`);
-        return null;
-      }
-      const data = await fallbackRes.json();
-      const tokens = (Array.isArray(data) ? data : (data.tokens || [])) as any[];
-      return tokens.map((t: any) => ({
-        address: low(t.address || t.tokenAddress || ''),
-        symbol: t.symbol || '',
-        name: t.name || '',
-        decimals: t.decimals || 18,
-        logoURI: t.logoURI || t.logo || '',
-      })).filter(t => t.address).filter(isTokenAllowed);
-    }
-    
-    const data = await response.json();
-    const tokens = (Array.isArray(data) ? data : (data.tokens || [])) as any[];
-    
-    if (tokens.length === 0) {
-      console.warn(`Self-hosted API returned empty tokens array`);
-      return null;
-    }
-    
-    const tokenList: Token[] = tokens.map((t: any) => ({
-      address: low(t.address || t.tokenAddress || ''),
-      symbol: t.symbol || '',
-      name: t.name || '',
-      decimals: t.decimals || 18,
-      logoURI: t.logoURI || t.logo || '',
-    })).filter(t => t.address).filter(isTokenAllowed);
-    
-    console.log(`✓ Loaded ${tokenList.length} tokens for chain ${chainId}`);
-    return tokenList;
-  } catch (e) {
-    console.warn(`Failed to load self-hosted tokens for chain ${chainId}:`, e);
+  const chainKey = chainId === 1 ? 'ethereum' : 'polygon';
+  const tokens = (localTokens as any)[chainKey] || [];
+  
+  if (tokens.length === 0) {
+    console.warn(`Local tokens for chain ${chainId} not found in tokens.json`);
     return null;
   }
+  
+  const tokenList: Token[] = tokens.map((t: any) => ({
+    address: low(t.address || ''),
+    symbol: t.symbol || '',
+    name: t.name || '',
+    decimals: t.decimals || 18,
+    logoURI: t.logoURI || '',
+  })).filter((t: any) => t.address).filter(isTokenAllowed);
+  
+  console.log(`✓ Loaded ${tokenList.length} tokens for chain ${chainId} from local host`);
+  return tokenList;
 }
 
 
