@@ -99,13 +99,19 @@ async function getPriceFromPool(
 async function getOnChainPrice(address: string, chainId: number): Promise<OnChainPrice | null> {
   const cacheKey = `${chainId}-${address.toLowerCase()}`;
   const cached = onChainCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+  // Return cache if valid (20 seconds) or if it's a failure cache (5 seconds)
+  if (cached && Date.now() - cached.timestamp < (cached.price === 0 ? 5000 : CACHE_TTL)) {
     return cached;
   }
 
   const tokenAddr = address.toLowerCase();
   const config = CHAIN_CONFIG[chainId];
-  if (!config) return null;
+  if (!config) {
+    // Cache null result briefly
+    const failCache: OnChainPrice = { price: 0, mc: 0, volume: 0, timestamp: Date.now() };
+    onChainCache.set(cacheKey, failCache);
+    return null;
+  }
 
   try {
     const provider = new ethers.providers.JsonRpcProvider(config.rpc);
@@ -244,19 +250,21 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
       bestPrice = Math.max(...validPrices);
     }
 
-    if (!bestPrice) {
-      console.warn(`No pools found for token ${tokenAddr} on chain ${chainId}`);
-      return null;
-    }
-
+    // Cache result even if price is 0 (failed lookup) - avoids repeated RPC hammering
     const result: OnChainPrice = {
-      price: bestPrice,
+      price: bestPrice || 0,
       mc: 0, 
       volume: 0, 
       timestamp: Date.now()
     };
 
     onChainCache.set(cacheKey, result);
+    
+    if (!bestPrice) {
+      console.warn(`No pools found for token ${tokenAddr} on chain ${chainId}, cached failure result`);
+      // Return null to trigger fallback in API, but cache is updated for next quick requests
+      return null;
+    }
     
     // Clean old cache entries periodically (every request when size > 5000)
     if (onChainCache.size > 5000) {
@@ -667,6 +675,14 @@ export async function registerRoutes(
     
     // Single-flight and cache check handled inside getOnChainPrice
     const stats = await getOnChainPrice(String(address), Number(chainId));
+    
+    // Return cache hit even if price is 0 (means pool not found, but cache prevents hammering RPC)
+    const cacheKey = `${chainId}-${String(address).toLowerCase()}`;
+    const cached = onChainCache.get(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+    
     if (!stats) return res.status(503).json({ error: "Failed to fetch on-chain data" });
     
     res.json(stats);
