@@ -6,7 +6,7 @@ import { TokenInput } from '@/components/TokenInput';
 import { SlippageControl } from '@/components/SlippageControl';
 import { TokenInfoSidebar } from '@/components/TokenInfoSidebar';
 import { showToast } from '@/components/Toast';
-import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress, getCgStatsMap, getStatsByTokenAddress, getHistoricalPriceData } from '@/lib/tokenService';
+import { Token, loadTokensAndMarkets, loadTokensForChain, getTokenPriceUSD, getTokenMap, getTokenByAddress, getCgStatsMap, getStatsByTokenAddress } from '@/lib/tokenService';
 import { getBestQuote, getLifiBridgeQuote, executeSwap, approveToken, checkAllowance, parseSwapError, QuoteResult } from '@/lib/swapService';
 import { config, ethereumConfig, low, isAddress } from '@/lib/config';
 import { useChain, ChainType, chainConfigs } from '@/lib/chainContext';
@@ -444,14 +444,6 @@ export default function Home() {
       showToast(`Selected ${token.symbol} as FROM token`, { type: 'success', ttl: 2000 });
       clearSelection();
       
-      // Load historical price data for sparkline - use token's chainId if available
-      const chainId = token.chainId || (chain === 'ETH' ? 1 : 137);
-      getHistoricalPriceData(token, chainId).then(history => {
-        if (history.length > 0) {
-          priceHistoryRef.current.from = history;
-          setFromPriceHistory([...history]);
-        }
-      });
     }
   }, [selectedFromToken, selectionVersion, clearSelection, chain]);
 
