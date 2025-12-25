@@ -418,6 +418,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.debug(`[Icon] Failed to fetch logoURI from tokens.json: ${e}`);
       }
       
+      // Try GeckoTerminal
+      const geckoTerminalUrl = `https://assets.geckoterminal.com/networks/${cid === 1 ? 'ethereum' : 'polygon'}/tokens/${addr}/thumb.png`;
+      try {
+        const response = await fetch(geckoTerminalUrl, { method: 'HEAD', timeout: 3000 });
+        if (response.ok) {
+          iconCache.set(cacheKey, { url: geckoTerminalUrl, expires: Date.now() + ICON_CACHE_TTL });
+          return geckoTerminalUrl;
+        }
+      } catch (e) {
+        console.debug(`[Icon] GeckoTerminal failed for ${addr}: ${e}`);
+      }
+      
+      // Try DEXScreener
+      const dexscreenerUrl = `https://dexscreener.com/images/defiplated.png`;
+      try {
+        const response = await fetch(dexscreenerUrl, { method: 'HEAD', timeout: 3000 });
+        if (response.ok) {
+          iconCache.set(cacheKey, { url: dexscreenerUrl, expires: Date.now() + ICON_CACHE_TTL });
+          return dexscreenerUrl;
+        }
+      } catch (e) {
+        console.debug(`[Icon] DEXScreener failed for ${addr}: ${e}`);
+      }
+      
       // Fallback to placeholder
       const placeholder = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxNCIgY3k9IjE0IiByPSIxNCIgZmlsbD0iIzJBMkEzQSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjODg4IiBmb250LXNpemU9IjEyIj4/PC90ZXh0Pjwvc3ZnPg==';
       iconCache.set(cacheKey, { url: placeholder, expires: Date.now() + ICON_CACHE_TTL });
