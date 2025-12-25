@@ -44,9 +44,31 @@ const statsMapByChain = new Map<number, Map<string, TokenStats>>(); // Symbol/Na
 const statsMapByAddressChain = new Map<number, Map<string, TokenStats>>(); // Address lookup (primary)
 const priceCache = new Map<string, { price: number | null; ts: number }>();
 
-// Clear price cache to prevent cross-chain price contamination
-export function clearPriceCache(): void {
-  priceCache.clear();
+// WebSocket path for real-time prices
+const WS_PRICE_URL = `wss://${window.location.host}/api/ws/prices`;
+
+let priceWs: WebSocket | null = null;
+const priceCallbacks = new Map<string, (data: any) => void>();
+
+export function subscribeToPrice(address: string, chainId: number, callback: (data: any) => void) {
+  const subKey = `${chainId}-${address.toLowerCase()}`;
+  priceCallbacks.set(subKey, callback);
+
+  if (!priceWs || priceWs.readyState !== WebSocket.OPEN) {
+    priceWs = new WebSocket(WS_PRICE_URL);
+    priceWs.onopen = () => {
+      priceWs?.send(JSON.stringify({ type: 'subscribe', address, chainId }));
+    };
+    priceWs.onmessage = (event) => {
+      const { type, data, address, chainId } = JSON.parse(event.data);
+      if (type === 'price') {
+        const key = `${chainId}-${address.toLowerCase()}`;
+        priceCallbacks.get(key)?.(data);
+      }
+    };
+  } else {
+    priceWs.send(JSON.stringify({ type: 'subscribe', address, chainId }));
+  }
 }
 
 const DARK_SVG_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxNCIgY3k9IjE0IiByPSIxNCIgZmlsbD0iIzJBMkEzQSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjODg4IiBmb250LXNpemU9IjEyIj4/PC90ZXh0Pjwvc3ZnPg==';

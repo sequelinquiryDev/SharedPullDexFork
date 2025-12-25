@@ -169,7 +169,7 @@ export function TokenInput({
 
     setLoading(true);
     try {
-      const allResults: { token: ExtendedToken & { currentPrice?: number; priceChange24h?: number }; stats: TokenStats | null; price: number | null; marketCap: number }[] = [];
+      let allResults: { token: ExtendedToken & { currentPrice?: number; priceChange24h?: number }; stats: TokenStats | null; price: number | null; marketCap: number }[] = [];
       
       for (const cid of chainIds) {
         // Check if query is a token address

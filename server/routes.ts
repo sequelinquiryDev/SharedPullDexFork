@@ -441,6 +441,7 @@ export async function registerRoutes(
     res.status(404).json({ error: "Not found" });
   });
 
+  app.get("/api/config", (req, res) => {
     res.json({
       chainId: Number(process.env.VITE_CHAIN_ID || 137),
       chainIdHex: process.env.VITE_CHAIN_ID_HEX || '0x89',
