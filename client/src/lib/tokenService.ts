@@ -11,15 +11,6 @@ export interface Token {
 
 // Filter function to remove unwanted tokens
 function isTokenAllowed(token: Token): boolean {
-  const symbol = (token.symbol || '').toUpperCase();
-  const name = (token.name || '').toUpperCase();
-  
-  // Remove tokens with BNB or SOL ticker
-  if (symbol === 'BNB' || symbol === 'SOL') return false;
-  
-  // Remove tokens with BINANCE or Wormhole in name
-  if (name.includes('BINANCE') || name.includes('WORMHOLE')) return false;
-  
   return true;
 }
 
@@ -213,7 +204,14 @@ async function loadTokensFromSelfHosted(chainId: number): Promise<Token[] | null
       const fallbackRes = await fetchWithTimeout(`/${filename}`, {}, 5000);
       if (!fallbackRes.ok) return null;
       const data = await fallbackRes.json();
-      return (Array.isArray(data) ? data : (data.tokens || [])) as Token[];
+      const tokens = (Array.isArray(data) ? data : (data.tokens || [])) as any[];
+      return tokens.map((t: any) => ({
+        address: low(t.address || t.tokenAddress || ''),
+        symbol: t.symbol || '',
+        name: t.name || '',
+        decimals: t.decimals || 18,
+        logoURI: t.logoURI || t.logo || '',
+      })).filter(t => t.address).filter(isTokenAllowed);
     }
     
     const data = await response.json();
@@ -649,7 +647,7 @@ export async function searchTokens(query: string, chainId?: number): Promise<Tok
   const matches = tokenList.filter((t) => {
     const s = t.symbol || '';
     const n = t.name || '';
-    return (s.toLowerCase().includes(q) || n.toLowerCase().includes(q)) && isTokenAllowed(t);
+    return (s.toLowerCase().includes(q) || n.toLowerCase().includes(q));
   });
 
   const withStats = matches.map((t) => {
@@ -666,45 +664,20 @@ export async function searchTokens(query: string, chainId?: number): Promise<Tok
 
   withStats.sort((a, b) => b.score - a.score);
 
-  const top7ByMarketCap = withStats
-    .filter((x) => x.marketCap > 0)
-    .sort((a, b) => b.marketCap - a.marketCap)
-    .slice(0, 7);
-
-  const usedAddresses = new Set(top7ByMarketCap.map((x) => x.t.address));
-  
-  const top7ByVolume = withStats
-    .filter((x) => !usedAddresses.has(x.t.address) && x.v24 > 0)
-    .sort((a, b) => b.v24 - a.v24)
-    .slice(0, 7);
-
-  const combined = [...top7ByMarketCap, ...top7ByVolume];
-  
-  const seen = new Set<string>();
-  const unique = combined.filter((x) => {
-    if (seen.has(x.t.address)) return false;
-    seen.add(x.t.address);
-    return true;
-  });
-
-  return unique.slice(0, 14).map((x) => x.t);
+  return withStats.slice(0, 15).map((x) => x.t);
 }
 
 export function getTopTokens(limit = 14, chainId?: number): { token: Token; stats: TokenStats | null }[] {
   const cid = chainId ?? config.chainId;
   const tokenList = getTokenList(cid);
   
-  // Allow tokens even if stats are null initially
-  const candidates = tokenList.filter((t) => isTokenAllowed(t));
-
-  const withStats = candidates.map((t) => {
+  const withStats = tokenList.map((t) => {
     const stat = getStatsByTokenAddress(t.address, cid);
     return { token: t, stats: stat };
   });
 
   if (withStats.length === 0) return [];
 
-  // Sort by market cap if stats available, otherwise keep original order
   const sorted = [...withStats].sort((a, b) => {
     const mcA = a.stats?.marketCap || 0;
     const mcB = b.stats?.marketCap || 0;
