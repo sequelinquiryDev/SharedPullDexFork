@@ -156,12 +156,15 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
     // Dynamic Discovery & Decimal Persistence
     const filename = chainId === 1 ? 'eth-tokens.json' : 'polygon-tokens.json';
     try {
-      const data = fs.readFileSync(path.join(process.cwd(), filename), 'utf-8');
-      let tokens = JSON.parse(data);
+      let tokens = [];
+      if (fs.existsSync(path.join(process.cwd(), filename))) {
+        const data = fs.readFileSync(path.join(process.cwd(), filename), 'utf-8');
+        tokens = JSON.parse(data);
+      }
       const tokenIdx = tokens.findIndex((t: any) => t.address.toLowerCase() === tokenAddr);
       
       if (tokenIdx !== -1) {
-        if (!tokens[tokenIdx].decimals) {
+        if (!tokens[tokenIdx].decimals || tokens[tokenIdx].decimals === 18) {
           tokens[tokenIdx].decimals = decimals;
           fs.writeFileSync(path.join(process.cwd(), filename), JSON.stringify(tokens, null, 2));
           console.log(`Updated decimals for ${tokens[tokenIdx].symbol} in ${filename}`);

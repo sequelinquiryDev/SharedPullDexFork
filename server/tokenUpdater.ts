@@ -12,8 +12,8 @@ async function fetchTokens(chainId: number, platform: string, limit: number) {
     const allTokens = [];
 
     for (const page of pages) {
-      const url = `${baseUrl}/coins/markets?vs_currency=usd&category=${platform === 'ethereum' ? 'ethereum-ecosystem' : 'polygon-ecosystem'}&order=market_cap_desc&per_page=250&page=${page}&sparkline=false${authParam}`;
-      console.log(`Fetching ${platform} page ${page} from: ${url.replace(COINGECKO_API_KEY, '***')}`);
+      const url = `${baseUrl}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${page}&sparkline=false`;
+      console.log(`Fetching page ${page} from: ${url}`);
       
       const response = await fetch(url);
       if (!response.ok) {
@@ -28,7 +28,8 @@ async function fetchTokens(chainId: number, platform: string, limit: number) {
     }
     
     const mapped = allTokens.map((coin: any) => {
-      const address = coin.platforms?.[platform === 'ethereum' ? 'ethereum' : 'polygon-pos'];
+      // Use "ethereum" for ETH and "polygon-pos" for Polygon
+      const address = coin.platforms?.[platform];
       if (!address) return null;
       
       return {
