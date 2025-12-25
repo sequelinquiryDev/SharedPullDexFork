@@ -54,9 +54,10 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
     const provider = new ethers.providers.JsonRpcProvider(config.rpc);
     const tokenAddr = address.toLowerCase();
     
-    // Simplified price discovery from pools
-    // Real implementation would iterate config.factories and check reserves
-    const price = Math.random() * 100; // Mock for brevity, real logic uses getCreate2Address
+    // For contract search/metadata (metadata is already handled by /api/tokens/search)
+    // Here we focus on the real price logic
+    // This is where real on-chain price discovery should be implemented
+    const price = Math.random() * 100; // Placeholder for real price discovery logic
     
     const result = { price, mc: 0, volume: 0, timestamp: Date.now() };
     onChainCache.set(cacheKey, result);
@@ -122,6 +123,37 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
     });
   }, 8000);
+
+  app.get("/api/prices/onchain", async (req, res) => {
+    const { address, chainId } = req.query;
+    if (!address || !chainId) return res.status(400).send("Missing params");
+    const price = await fetchPriceAggregated(address as string, Number(chainId));
+    res.json(price);
+  });
+
+  app.get("/api/tokens/search", async (req, res) => {
+    const { address, chainId } = req.query;
+    if (!address || !chainId) return res.status(400).send("Missing params");
+    
+    const cid = Number(chainId);
+    const addr = (address as string).toLowerCase();
+    const config = CHAIN_CONFIG[cid];
+    
+    if (!config) return res.status(400).send("Unsupported chain");
+    
+    try {
+      const provider = new ethers.providers.JsonRpcProvider(config.rpc);
+      const contract = new ethers.Contract(addr, ERC20_ABI, provider);
+      const [symbol, decimals] = await Promise.all([
+        contract.symbol(),
+        contract.decimals()
+      ]);
+      
+      res.json({ address: addr, symbol, decimals, name: symbol });
+    } catch (e) {
+      res.status(404).send("Token not found on-chain");
+    }
+  });
 
   return httpServer;
 }

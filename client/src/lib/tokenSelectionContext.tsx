@@ -3,6 +3,9 @@ import { Token } from './tokenService';
 import { useChain } from './chainContext';
 import { DEFAULT_TOKENS } from './config';
 
+// Fix: Add explicit cast to satisfy TypeScript
+const typedDefaultTokens: Record<number, { from: any; to: any }> = DEFAULT_TOKENS as any;
+
 interface TokenSelectionContextValue {
   selectedFromToken: Token | null;
   selectedToToken: Token | null;
@@ -16,17 +19,19 @@ const TokenSelectionContext = createContext<TokenSelectionContextValue | null>(n
 
 export function TokenSelectionProvider({ children }: { children: ReactNode }) {
   const { chainId } = useChain();
-  const defaults = DEFAULT_TOKENS[chainId as keyof typeof DEFAULT_TOKENS] || DEFAULT_TOKENS[137];
+  const defaults = typedDefaultTokens[chainId] || typedDefaultTokens[137];
   
-  const [selectedFromToken, setSelectedFromToken] = useState<Token | null>(defaults.from);
-  const [selectedToToken, setSelectedToToken] = useState<Token | null>(defaults.to);
+  const [selectedFromToken, setSelectedFromToken] = useState<Token | null>(defaults?.from || null);
+  const [selectedToToken, setSelectedToToken] = useState<Token | null>(defaults?.to || null);
   const [selectionVersion, setSelectionVersion] = useState(0);
 
   // Update defaults when chain changes
   useEffect(() => {
-    const newDefaults = DEFAULT_TOKENS[chainId as keyof typeof DEFAULT_TOKENS] || DEFAULT_TOKENS[137];
-    setSelectedFromToken(newDefaults.from);
-    setSelectedToToken(newDefaults.to);
+    const newDefaults = typedDefaultTokens[chainId] || typedDefaultTokens[137];
+    if (newDefaults) {
+      setSelectedFromToken(newDefaults.from);
+      setSelectedToToken(newDefaults.to);
+    }
   }, [chainId]);
 
   const selectFromToken = useCallback((token: Token) => {
