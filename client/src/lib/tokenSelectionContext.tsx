@@ -14,7 +14,6 @@ interface TokenSelectionContextValue {
 
 const TokenSelectionContext = createContext<TokenSelectionContextValue | null>(null);
 
-// Fix: Add explicit cast to satisfy TypeScript
 const typedDefaultTokens: Record<number, { from: any; to: any }> = DEFAULT_TOKENS as any;
 
 export function TokenSelectionProvider({ children }: { children: ReactNode }) {
@@ -25,7 +24,6 @@ export function TokenSelectionProvider({ children }: { children: ReactNode }) {
   const [selectedToToken, setSelectedToToken] = useState<Token | null>(defaults?.to || null);
   const [selectionVersion, setSelectionVersion] = useState(0);
 
-  // Update defaults when chain changes
   useEffect(() => {
     const newDefaults = typedDefaultTokens[chainId] || typedDefaultTokens[137];
     if (newDefaults) {

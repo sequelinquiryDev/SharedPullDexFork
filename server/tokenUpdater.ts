@@ -9,11 +9,9 @@ async function fetchCMC(chainId: number) {
   if (!CMC_API_KEY) return [];
   try {
     console.log(`Fetching top tokens for chain ${chainId} from CMC...`);
-    // CMC ID for Ethereum is usually handled by platform field. 
-    // We'll use listings/latest and filter by platform.
     const response = await axios.get('https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest', {
       params: {
-        limit: 1000, // Search deeper to find enough for each chain
+        limit: 1000, 
         convert: 'USD',
         aux: 'platform,symbol,name'
       },
@@ -34,7 +32,7 @@ async function fetchCMC(chainId: number) {
         logoURI: `https://s2.coinmarketcap.com/static/img/coins/64x64/${c.id}.png`,
         decimals: 18
       }));
-  } catch (e) {
+  } catch (e: any) {
     console.error(`CMC fetch error for chain ${chainId}:`, e.message);
     return [];
   }
@@ -47,12 +45,12 @@ async function fetchCG(platform: string) {
   
   try {
     console.log(`Fetching top tokens for ${platform} from CoinGecko...`);
-    // Iterate few pages to ensure we get enough addresses
-    for (let page = 1; page <= 2; page++) {
+    for (let page = 1; page <= 5; page++) {
       const url = `${baseUrl}/coins/markets?vs_currency=usd&category=${platform}-ecosystem&order=market_cap_desc&per_page=250&page=${page}${auth}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
+        if (data.length === 0) break;
         tokens.push(...data.map((c: any) => {
           const addr = (c.platforms?.[platform === 'ethereum' ? 'ethereum' : 'polygon-pos'] || '').toLowerCase();
           if (!addr) return null;
@@ -77,7 +75,7 @@ async function fetchCG(platform: string) {
 }
 
 export async function updateTokenLists() {
-  console.log("Updating tokens.json with CMC (primary) and CG (fallback)...");
+  console.log("Updating tokens.json with CMC and CoinGecko data...");
   
   const [ethCMC, polCMC, ethCG, polCG] = await Promise.all([
     fetchCMC(1),
@@ -101,7 +99,6 @@ export async function updateTokenLists() {
 
   const tokensData = { ethereum, polygon };
   
-  // Update tokens.json
   const tokensPath = path.join(process.cwd(), "client", "src", "lib", "tokens.json");
   fs.writeFileSync(tokensPath, JSON.stringify(tokensData, null, 2));
 
