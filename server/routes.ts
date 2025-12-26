@@ -219,47 +219,34 @@ async function refreshAllAnalytics() {
 
 // Start unconditional price refresh every 25 seconds for ALL dynamic tokens
 function startUnconditionalPriceRefresh() {
-  // Initial reload
+  // Initial load - load all tokens once at startup
   reloadAllTokensForWatching();
   
-  // Unconditionally refresh ALL tokens every 25 seconds
+  // Unconditionally refresh prices every 25 seconds (no reload, just refresh cache)
   setInterval(async () => {
-    reloadAllTokensForWatching();
     const tokenArray = Array.from(watchedTokens);
-    console.log(`[PriceRefresh] Starting unconditional refresh of ${tokenArray.length} tokens...`);
+    console.log(`[PriceCache] Refreshing ${tokenArray.length} tokens (server-side caching only)...`);
     
     for (const tokenKey of tokenArray) {
       const [chainIdStr, address] = tokenKey.split('-');
       const chainId = Number(chainIdStr);
       
       // Fetch fresh price unconditionally (ignore cache)
-      const price = await getOnChainPrice(address, chainId);
-      if (!price) continue;
-      
-      // Stream to all subscribed clients for this token
-      const subKey = `${chainId}-${address}`;
-      const subs = activeSubscriptions.get(subKey);
-      if (subs && subs.size > 0) {
-        const msg = JSON.stringify({ type: 'price', data: price, address, chainId });
-        subs.forEach(ws => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(msg);
-        });
-      }
+      await getOnChainPrice(address, chainId);
+      // Price is now cached in onChainCache, ready to stream on subscription
     }
     
-    console.log('[PriceRefresh] Unconditional refresh complete');
+    console.log('[PriceCache] Refresh complete');
   }, PRICE_REFRESH_INTERVAL);
 }
 
 // Start automatic analytics refresh every 1 hour (separate from prices)
 function startAnalyticsRefreshTimer() {
-  // Initial load
-  reloadAllTokensForWatching();
+  // Initial load once
   refreshAllAnalytics();
   
-  // Refresh every 1 hour
+  // Refresh every 1 hour (don't reload tokens, they're already tracked)
   setInterval(() => {
-    reloadAllTokensForWatching();
     refreshAllAnalytics();
   }, ANALYTICS_CACHE_TTL);
 }
