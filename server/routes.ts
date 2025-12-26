@@ -5,7 +5,13 @@ import fs from "fs";
 import path from "path";
 import { ethers } from "ethers";
 import { WebSocketServer, WebSocket } from "ws";
-import { updateTokenLists } from "./tokenUpdater";
+import { ensureTokenListExists } from "./tokenUpdater";
+
+// Single-flight token refresh mechanism
+let tokenRefreshTimer: NodeJS.Timeout | null = null;
+let pendingTokensAdded = false;
+const TOKEN_REFRESH_TTL = 5000; // 5 seconds
+let tokenRefreshClients: Set<WebSocket> = new Set();
 
 const ERC20_ABI = ["function decimals() view returns (uint8)", "function symbol() view returns (string)"];
 const PAIR_ABI = [
@@ -236,8 +242,27 @@ async function fetchPriceAggregated(address: string, chainId: number) {
   return promise;
 }
 
+// Trigger single-flight token refresh to all connected clients
+function triggerTokenRefresh() {
+  if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
+  
+  if (!pendingTokensAdded) {
+    pendingTokensAdded = true;
+    tokenRefreshTimer = setTimeout(() => {
+      console.log(`[TokenRefresh] Broadcasting refresh to ${tokenRefreshClients.size} clients`);
+      tokenRefreshClients.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'refresh-tokens' }));
+        }
+      });
+      pendingTokensAdded = false;
+      tokenRefreshTimer = null;
+    }, TOKEN_REFRESH_TTL);
+  }
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  updateTokenLists().catch(console.error);
+  ensureTokenListExists();
   
   // Start analytics caching and refresh timer
   startAnalyticsRefreshTimer();
@@ -245,8 +270,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const wss = new WebSocketServer({ server: httpServer, path: '/api/ws/prices' });
 
   wss.on('connection', (ws) => {
+    tokenRefreshClients.add(ws);
     let currentSub: string | null = null;
     let currentAnalyticsSub: string | null = null;
+    ws.on('close', () => {
+      tokenRefreshClients.delete(ws);
+    });
     ws.on('message', async (msg) => {
       try {
         const data = JSON.parse(msg.toString());
@@ -361,6 +390,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         // Add to watched tokens for analytics refresh
         watchedTokens.add(`${cid}-${addr}`);
+        
+        // Trigger single-flight token refresh to all connected clients
+        triggerTokenRefresh();
         
         console.log(`[TokenSearch] Added new token to tokens.json: ${symbol} (${addr}) on chain ${cid}`);
       }

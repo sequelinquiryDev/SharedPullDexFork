@@ -107,13 +107,17 @@ export async function loadTokensAndMarkets(): Promise<void> {
   ]);
   console.log("✓ Token lists loaded from API");
   
-  // Auto-refresh every 30 seconds so newly added tokens appear for all users
-  setInterval(() => {
-    Promise.all([
-      refreshTokensForChain(1),
-      refreshTokensForChain(137)
-    ]).catch(e => console.error('[TokenRefresh] Error:', e));
-  }, 30000);
+  // Listen for token refresh events from server (single-flight refresh)
+  // When tokens are added by users, server will signal refresh within 5 seconds
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('refresh-tokens', async () => {
+      await Promise.all([
+        refreshTokensForChain(1),
+        refreshTokensForChain(137)
+      ]);
+      console.log('✓ Token list refreshed from server signal');
+    });
+  }
 }
 
 export function getTokenList(chainId?: number): Token[] {
