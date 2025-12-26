@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, loadTokensForChain, getTokenLogoUrl, getTokenPriceUSD } from '@/lib/tokenService';
-import { formatUSD, low, isAddress } from '@/lib/config';
+import { formatUSD, low, isAddress, type OnChainPrice } from '@/lib/config';
 import { useChain } from '@/lib/chainContext';
+import { subscribeToPrice, connectPriceService } from '@/lib/priceService';
 
 interface ExtendedToken extends Token {
   chainId?: number;
@@ -41,6 +42,7 @@ export function TokenInput({
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSelectedAddressRef = useRef<string>('');
   const firstClickRef = useRef<boolean>(true);
+  const unsubscribersRef = useRef<Map<string, () => void>>(new Map());
 
   // Whitelist of real stablecoin addresses on major chains
   const STABLECOIN_WHITELIST = {
@@ -255,36 +257,46 @@ export function TokenInput({
   useEffect(() => {
     if (!showSuggestions || suggestions.length === 0) return;
 
-    const updatePrices = () => {
-      // Trigger background caching for each suggestion shown
-      suggestions.forEach(item => {
-        const tokenChainId = (item.token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
-        fetch(`/api/prices/onchain?address=${item.token.address}&chainId=${tokenChainId}`).catch(() => {});
+    // Connect to WebSocket and subscribe to prices for all visible suggestions
+    connectPriceService();
+    
+    // Clear old subscriptions and subscribe to all suggestions
+    unsubscribersRef.current.forEach(unsub => unsub());
+    unsubscribersRef.current.clear();
+
+    suggestions.forEach(({ token }) => {
+      const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
+      const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
+      
+      // Request immediate server-side caching when token appears in suggestions
+      fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`).catch(() => {});
+
+      const unsubscribe = subscribeToPrice(token.address, tokenChainId, (priceData: OnChainPrice) => {
+        setSuggestions((prev) =>
+          prev.map((item) => {
+            if (item.token.address.toLowerCase() === token.address.toLowerCase() && 
+                (item.token as ExtendedToken).chainId === tokenChainId) {
+              return {
+                ...item,
+                token: {
+                  ...item.token,
+                  currentPrice: priceData.price,
+                },
+                price: priceData.price,
+              };
+            }
+            return item;
+          })
+        );
       });
+      
+      unsubscribersRef.current.set(subKey, unsubscribe);
+    });
 
-      setSuggestions((prev) =>
-        prev.map((item) => {
-          const tokenChainId = (item.token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
-          const cgStats = getCgStatsMap(tokenChainId);
-          const stats = cgStats.get(low(item.token.symbol)) || cgStats.get(low(item.token.name)) || item.stats;
-          return {
-            ...item,
-            token: {
-              ...item.token,
-              currentPrice: stats?.price ?? item.token.currentPrice,
-              priceChange24h: stats?.change ?? item.token.priceChange24h,
-            },
-            stats,
-            price: stats?.price ?? item.price,
-          };
-        })
-      );
+    return () => {
+      unsubscribersRef.current.forEach(unsub => unsub());
+      unsubscribersRef.current.clear();
     };
-
-    // Update prices immediately when showing suggestions or chain changes
-    updatePrices();
-    const priceInterval = setInterval(updatePrices, 5000);
-    return () => clearInterval(priceInterval);
   }, [showSuggestions, suggestions.length, chain]);
 
   useEffect(() => {
