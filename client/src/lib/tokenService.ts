@@ -244,13 +244,8 @@ export async function fetchTokenIcon(token: Token, chainId?: number): Promise<st
 }
 
 export function getTokenLogoUrl(token: Token, chainId?: number): string {
-  if (token.logoURI) return token.logoURI;
   const cid = chainId ?? config.chainId;
-  if (cid === 1) {
-    // For ETH mainnet tokens, Coingecko/TrustWallet usually works with correct casing
-    return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/${ethers.utils.getAddress(token.address)}/logo.png`;
-  }
-  return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/assets/${low(token.address)}/logo.png`;
+  return `/api/icon?address=${low(token.address)}&chainId=${cid}`;
 }
 
 export interface OnChainAnalytics {

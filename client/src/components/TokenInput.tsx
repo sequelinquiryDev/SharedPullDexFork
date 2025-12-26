@@ -240,8 +240,7 @@ export function TokenInput({
   // Fetch icon for selected token using cached /api/icon endpoint
   useEffect(() => {
     if (selectedToken) {
-      const url = `/api/icon?address=${selectedToken.address}&chainId=${chainId}`;
-      setSelectedTokenIcon(url);
+      setSelectedTokenIcon(getTokenLogoUrl(selectedToken, chainId));
     }
   }, [selectedToken?.address, chainId]);
 
@@ -254,8 +253,7 @@ export function TokenInput({
       const cacheKey = `${tokenChainId}-${token.address}`;
       
       if (!suggestionIcons.has(cacheKey)) {
-        const url = `/api/icon?address=${token.address}&chainId=${tokenChainId}`;
-        setSuggestionIcons((prev) => new Map(prev).set(cacheKey, url));
+        setSuggestionIcons((prev) => new Map(prev).set(cacheKey, getTokenLogoUrl(token, tokenChainId)));
       }
     });
   }, [suggestions.length, chainId]);

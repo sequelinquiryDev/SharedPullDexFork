@@ -33,6 +33,22 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
     : [`Search ${chain} tokens...`, `Search contract address...`];
   const typewriterPlaceholder = useTypewriter(placeholderTexts, 60, 30, 900);
 
+  const [suggestionIcons, setSuggestionIcons] = useState<Map<string, string>>(new Map());
+
+  // Fetch icons for all suggestions
+  useEffect(() => {
+    if (suggestions.length === 0) return;
+
+    suggestions.forEach(({ token }) => {
+      const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
+      const cacheKey = `${tokenChainId}-${token.address}`;
+      
+      if (!suggestionIcons.has(cacheKey)) {
+        setSuggestionIcons((prev) => new Map(prev).set(cacheKey, getTokenLogoUrl(token, tokenChainId)));
+      }
+    });
+  }, [suggestions.length, chain]);
+
   const handleSearch = useCallback(async (query: string) => {
     // BRG mode: search both chains; otherwise single chain
     const chainIds = chain === 'BRG' ? [1, 137] : [chain === 'ETH' ? 1 : 137];
@@ -332,7 +348,7 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
                 >
                   <div className="suggestion-left">
                     <img 
-                      src={`/api/icon?address=${token.address}&chainId=${tokenChainId || (chain === 'ETH' ? 1 : 137)}`} 
+                      src={suggestionIcons.get(`${tokenChainId || (chain === 'ETH' ? 1 : 137)}-${token.address}`) || getPlaceholderImage()} 
                       alt={token.symbol}
                       style={{ width: '28px', height: '28px', borderRadius: '50%' }}
                       onError={(e) => {
