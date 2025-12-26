@@ -245,10 +245,9 @@ export function TokenInput({
       if (cached) {
         setSelectedTokenIcon(cached);
       } else {
-        fetchTokenIcon(selectedToken, chainId).then((url) => {
-          iconCacheRef.current.set(cacheKey, url);
-          setSelectedTokenIcon(url);
-        });
+        const url = getTokenLogoUrl(selectedToken, chainId);
+        iconCacheRef.current.set(cacheKey, url);
+        setSelectedTokenIcon(url);
       }
     }
   }, [selectedToken?.address, chainId]);
@@ -266,10 +265,9 @@ export function TokenInput({
         if (cached) {
           setSuggestionIcons((prev) => new Map(prev).set(cacheKey, cached));
         } else {
-          fetchTokenIcon(token, tokenChainId).then((url) => {
-            iconCacheRef.current.set(cacheKey, url);
-            setSuggestionIcons((prev) => new Map(prev).set(cacheKey, url));
-          });
+          const url = getTokenLogoUrl(token, tokenChainId);
+          iconCacheRef.current.set(cacheKey, url);
+          setSuggestionIcons((prev) => new Map(prev).set(cacheKey, url));
         }
       }
     });
