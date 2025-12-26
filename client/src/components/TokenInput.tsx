@@ -521,7 +521,7 @@ export function TokenInput({
                 >
                   <div className="suggestion-left">
                     <img 
-                      src={suggestionIcons.get(`${tokenChainId}-${token.address}`) || getPlaceholderImage()} 
+                      src={getTokenLogoUrl(token, tokenChainId)} 
                       alt={token.symbol}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = getPlaceholderImage();

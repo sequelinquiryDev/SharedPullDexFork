@@ -334,6 +334,7 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
                     <img 
                       src={getTokenLogoUrl(token, tokenChainId)} 
                       alt={token.symbol}
+                      style={{ width: '28px', height: '28px', borderRadius: '50%' }}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = getPlaceholderImage();
                       }}
