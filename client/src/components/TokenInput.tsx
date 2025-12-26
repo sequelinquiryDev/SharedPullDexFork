@@ -36,8 +36,8 @@ export function TokenInput({
   const [suggestions, setSuggestions] = useState<{ token: ExtendedToken & { currentPrice?: number; priceChange24h?: number }; stats: TokenStats | null; price: number | null }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [iconUrls, setIconUrls] = useState<Map<string, string>>(new Map());
   const [selectedTokenIcon, setSelectedTokenIcon] = useState<string>('');
+  const [suggestionIcons, setSuggestionIcons] = useState<Map<string, string>>(new Map());
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,6 +45,7 @@ export function TokenInput({
   const lastSelectedAddressRef = useRef<string>('');
   const firstClickRef = useRef<boolean>(true);
   const unsubscribersRef = useRef<Map<string, () => void>>(new Map());
+  const iconCacheRef = useRef<Map<string, string>>(new Map());
 
   // Whitelist of real stablecoin addresses on major chains
   const STABLECOIN_WHITELIST = {
@@ -239,25 +240,79 @@ export function TokenInput({
   // Fetch icon for selected token using cached /api/icon endpoint
   useEffect(() => {
     if (selectedToken) {
-      fetchTokenIcon(selectedToken, chainId).then((url) => {
-        setSelectedTokenIcon(url);
-      });
+      const cacheKey = `${chainId}-${selectedToken.address}`;
+      const cached = iconCacheRef.current.get(cacheKey);
+      if (cached) {
+        setSelectedTokenIcon(cached);
+      } else {
+        fetchTokenIcon(selectedToken, chainId).then((url) => {
+          iconCacheRef.current.set(cacheKey, url);
+          setSelectedTokenIcon(url);
+        });
+      }
     }
   }, [selectedToken?.address, chainId]);
 
-  // Fetch icons for suggestions using cached /api/icon endpoint
+  // Fetch icons for all suggestions
   useEffect(() => {
-    const newIconUrls = new Map(iconUrls);
+    if (suggestions.length === 0) return;
+
     suggestions.forEach(({ token }) => {
       const tokenChainId = (token as ExtendedToken).chainId || chainId;
-      const key = `${tokenChainId}-${token.address}`;
-      if (!newIconUrls.has(key)) {
-        fetchTokenIcon(token, tokenChainId).then((url) => {
-          setIconUrls((prev) => new Map(prev).set(key, url));
-        });
+      const cacheKey = `${tokenChainId}-${token.address}`;
+      
+      if (!suggestionIcons.has(cacheKey)) {
+        const cached = iconCacheRef.current.get(cacheKey);
+        if (cached) {
+          setSuggestionIcons((prev) => new Map(prev).set(cacheKey, cached));
+        } else {
+          fetchTokenIcon(token, tokenChainId).then((url) => {
+            iconCacheRef.current.set(cacheKey, url);
+            setSuggestionIcons((prev) => new Map(prev).set(cacheKey, url));
+          });
+        }
       }
     });
-  }, [suggestions, chainId]);
+  }, [suggestions.length, chainId]);
+
+  // Subscribe to prices for all suggestions and keep them streaming
+  useEffect(() => {
+    if (!showSuggestions || suggestions.length === 0) return;
+
+    connectPriceService();
+    unsubscribersRef.current.forEach((unsub) => unsub());
+    unsubscribersRef.current.clear();
+
+    suggestions.forEach(({ token }) => {
+      const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
+      const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
+      
+      const unsubscribe = subscribeToPrice(token.address, tokenChainId, (priceData: OnChainPrice) => {
+        setSuggestions((prev) =>
+          prev.map((item) => {
+            if (
+              item.token.address.toLowerCase() === token.address.toLowerCase() &&
+              (item.token as ExtendedToken).chainId === tokenChainId
+            ) {
+              return {
+                ...item,
+                token: { ...item.token, currentPrice: priceData.price },
+                price: priceData.price,
+              };
+            }
+            return item;
+          })
+        );
+      });
+      
+      unsubscribersRef.current.set(subKey, unsubscribe);
+    });
+
+    return () => {
+      unsubscribersRef.current.forEach((unsub) => unsub());
+      unsubscribersRef.current.clear();
+    };
+  }, [showSuggestions, suggestions.length, chain, chainId]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -279,72 +334,6 @@ export function TokenInput({
     };
   }, [showSuggestions]);
 
-  useEffect(() => {
-    if (!showSuggestions || suggestions.length === 0) return;
-
-    // Connect to WebSocket and subscribe to prices for all visible suggestions
-    connectPriceService();
-    
-    // Clear old subscriptions and subscribe to all suggestions
-    unsubscribersRef.current.forEach(unsub => unsub());
-    unsubscribersRef.current.clear();
-
-    // Fetch server cached prices immediately for all suggestions
-    suggestions.forEach(({ token }) => {
-      const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
-      const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
-      
-      // Fetch cached price immediately and display it
-      fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`)
-        .then(res => res.json())
-        .then((priceData: OnChainPrice) => {
-          setSuggestions((prev) =>
-            prev.map((item) => {
-              if (item.token.address.toLowerCase() === token.address.toLowerCase() && 
-                  (item.token as ExtendedToken).chainId === tokenChainId) {
-                return {
-                  ...item,
-                  token: {
-                    ...item.token,
-                    currentPrice: priceData.price,
-                  },
-                  price: priceData.price,
-                };
-              }
-              return item;
-            })
-          );
-        })
-        .catch(() => {});
-
-      // Subscribe to live price updates via WebSocket
-      const unsubscribe = subscribeToPrice(token.address, tokenChainId, (priceData: OnChainPrice) => {
-        setSuggestions((prev) =>
-          prev.map((item) => {
-            if (item.token.address.toLowerCase() === token.address.toLowerCase() && 
-                (item.token as ExtendedToken).chainId === tokenChainId) {
-              return {
-                ...item,
-                token: {
-                  ...item.token,
-                  currentPrice: priceData.price,
-                },
-                price: priceData.price,
-              };
-            }
-            return item;
-          })
-        );
-      });
-      
-      unsubscribersRef.current.set(subKey, unsubscribe);
-    });
-
-    return () => {
-      unsubscribersRef.current.forEach(unsub => unsub());
-      unsubscribersRef.current.clear();
-    };
-  }, [showSuggestions, suggestions.length, chain]);
 
   useEffect(() => {
     return () => {
@@ -377,7 +366,7 @@ export function TokenInput({
         }}>
           <div className="token-icon" style={{ position: 'relative', width: '28px', height: '28px' }}>
             <img
-              src={selectedToken ? selectedTokenIcon || getPlaceholderImage() : getPlaceholderImage()}
+              src={selectedTokenIcon || getPlaceholderImage()}
               alt={selectedToken?.symbol || "Select token"}
               onError={(e) => {
                 (e.target as HTMLImageElement).src = getPlaceholderImage();
@@ -532,7 +521,7 @@ export function TokenInput({
                 >
                   <div className="suggestion-left">
                     <img 
-                      src={iconUrls.get(`${tokenChainId}-${token.address}`) || getPlaceholderImage()} 
+                      src={suggestionIcons.get(`${tokenChainId}-${token.address}`) || getPlaceholderImage()} 
                       alt={token.symbol}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = getPlaceholderImage();
