@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, loadTokensForChain, getTokenLogoUrl, getTokenPriceUSD } from '@/lib/tokenService';
+import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, loadTokensForChain, getTokenLogoUrl, getTokenPriceUSD, fetchTokenIcon } from '@/lib/tokenService';
 import { formatUSD, low, isAddress, type OnChainPrice } from '@/lib/config';
 import { useChain } from '@/lib/chainContext';
 import { subscribeToPrice, connectPriceService } from '@/lib/priceService';
@@ -36,6 +36,8 @@ export function TokenInput({
   const [suggestions, setSuggestions] = useState<{ token: ExtendedToken & { currentPrice?: number; priceChange24h?: number }; stats: TokenStats | null; price: number | null }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [iconUrls, setIconUrls] = useState<Map<string, string>>(new Map());
+  const [selectedTokenIcon, setSelectedTokenIcon] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -234,6 +236,29 @@ export function TokenInput({
     }
   }, [selectedToken?.address]);
 
+  // Fetch icon for selected token using cached /api/icon endpoint
+  useEffect(() => {
+    if (selectedToken) {
+      fetchTokenIcon(selectedToken, chainId).then((url) => {
+        setSelectedTokenIcon(url);
+      });
+    }
+  }, [selectedToken?.address, chainId]);
+
+  // Fetch icons for suggestions using cached /api/icon endpoint
+  useEffect(() => {
+    const newIconUrls = new Map(iconUrls);
+    suggestions.forEach(({ token }) => {
+      const tokenChainId = (token as ExtendedToken).chainId || chainId;
+      const key = `${tokenChainId}-${token.address}`;
+      if (!newIconUrls.has(key)) {
+        fetchTokenIcon(token, tokenChainId).then((url) => {
+          setIconUrls((prev) => new Map(prev).set(key, url));
+        });
+      }
+    });
+  }, [suggestions, chainId]);
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -352,7 +377,7 @@ export function TokenInput({
         }}>
           <div className="token-icon" style={{ position: 'relative', width: '28px', height: '28px' }}>
             <img
-              src={selectedToken ? getTokenLogoUrl(selectedToken, chainId) : getPlaceholderImage()}
+              src={selectedToken ? selectedTokenIcon || getPlaceholderImage() : getPlaceholderImage()}
               alt={selectedToken?.symbol || "Select token"}
               onError={(e) => {
                 (e.target as HTMLImageElement).src = getPlaceholderImage();
@@ -507,7 +532,7 @@ export function TokenInput({
                 >
                   <div className="suggestion-left">
                     <img 
-                      src={getTokenLogoUrl(token, tokenChainId)} 
+                      src={iconUrls.get(`${tokenChainId}-${token.address}`) || getPlaceholderImage()} 
                       alt={token.symbol}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = getPlaceholderImage();
