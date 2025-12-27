@@ -713,16 +713,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/system/metrics", async (req, res) => {
     const { getCacheMetrics } = await import("./onchainDataFetcher");
     const { getRefreshStatus } = await import("./hourlyRefreshScheduler");
+    const { getNewTokenCheckerStatus } = await import("./newTokenChecker");
     
     const watchlistMetrics = getMetrics();
     const cacheMetrics = getCacheMetrics();
     const refreshStatus = getRefreshStatus();
+    const checkerStatus = getNewTokenCheckerStatus();
     
     res.json({
       watchlist: watchlistMetrics,
       cache: cacheMetrics,
       refresh: refreshStatus,
+      newTokenChecker: checkerStatus,
       timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Check if specific token is subscribed
+  app.get("/api/token/subscription-status", (req, res) => {
+    const { address, chainId } = req.query;
+    if (!address || !chainId) return res.status(400).json({ error: "Missing params" });
+    
+    const cid = Number(chainId);
+    const addr = (address as string).toLowerCase();
+    const key = `${cid}-${addr}`;
+    
+    const subs = activeSubscriptions.get(key);
+    const analyticsSubs = analyticsSubscriptions.get(`analytics-${key}`);
+    
+    res.json({
+      tokenKey: key,
+      priceSubscribers: subs?.clients.size || 0,
+      analyticsSubscribers: analyticsSubs?.size || 0,
+      hasActiveSubscribers: (subs?.clients.size || 0) > 0 || (analyticsSubs?.size || 0) > 0,
+      cachedPrice: onChainCache.get(key) ? 'YES' : 'NO',
+      cachedAnalytics: analyticsCache.get(`analytics-${key}`) ? 'YES' : 'NO',
     });
   });
 
