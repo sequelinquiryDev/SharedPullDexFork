@@ -79,6 +79,76 @@ const CACHE_TTL = 65 * 60 * 1000; // 1 hour 5 minutes
 // Single-flight locks to prevent thundering herd
 const fetchingLocks = new Map<string, Promise<OnChainData | null>>();
 
+// V3 Factory and Quoter ABIs
+const V3_FACTORY_ABI = [
+  "function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool)"
+];
+const V3_QUOTER_ABI = [
+  "function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)"
+];
+
+const V3_CONFIG: Record<number, { factory: string, quoter: string, fees: uint24[] }> = {
+  1: {
+    factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+    quoter: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6",
+    fees: [500, 3000, 10000]
+  },
+  137: {
+    factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+    quoter: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6", // Quoter V1
+    fees: [500, 3000, 10000]
+  }
+};
+
+async function fetchTokenPriceFromV3(
+  tokenAddr: string,
+  chainId: number,
+  provider: ethers.providers.Provider
+): Promise<number | null> {
+  const v3 = V3_CONFIG[chainId];
+  if (!v3) return null;
+
+  const config = CHAIN_CONFIG[chainId];
+  const STABLES = [config.usdcAddr, config.usdtAddr, config.wethAddr];
+  
+  const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, provider);
+  const decimals = await tokenContract.decimals();
+  const amountIn = ethers.utils.parseUnits("1", decimals);
+
+  for (const stable of STABLES) {
+    if (tokenAddr.toLowerCase() === stable.toLowerCase()) continue;
+    
+    for (const fee of v3.fees) {
+      try {
+        const quoter = new ethers.Contract(v3.quoter, V3_QUOTER_ABI, provider);
+        // staticCall to avoid gas estimation/execution
+        const amountOut = await quoter.callStatic.quoteExactInputSingle(
+          tokenAddr,
+          stable,
+          fee,
+          amountIn,
+          0
+        );
+
+        if (amountOut.gt(0)) {
+          const stableContract = new ethers.Contract(stable, ERC20_ABI, provider);
+          const stableDecimals = await stableContract.decimals();
+          let price = parseFloat(ethers.utils.formatUnits(amountOut, stableDecimals));
+          
+          if (stable.toLowerCase() === config.wethAddr.toLowerCase()) {
+            const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
+            if (wethPrice) price *= wethPrice;
+          }
+          return price;
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Fetch token price by finding pair reserves on DEX
  * Returns price in USDC terms
@@ -94,13 +164,18 @@ async function fetchTokenPriceFromDex(
 
     const provider = new ethers.providers.JsonRpcProvider(config.rpc);
     const tokenAddress = ethers.utils.getAddress(tokenAddr);
-    const stablecoinAddr = ethers.utils.getAddress(config.usdcAddr);
 
-    // Try all factories and multiple stablecoin pairs to find a price
+    // Try Uniswap V3 first as it often has better liquidity for major tokens
+    if (!isInternalWethCall) {
+      const v3Price = await fetchTokenPriceFromV3(tokenAddress, chainId, provider);
+      if (v3Price) return v3Price;
+    }
+
+    // Try all V2-style factories
     const STABLECOINS = [
       config.usdcAddr,
       config.usdtAddr,
-      config.wethAddr, // Use WETH as an intermediate if no direct stable pair exists
+      config.wethAddr,
     ].map(addr => ethers.utils.getAddress(addr));
 
     for (const factoryAddr of config.factories) {
