@@ -48,12 +48,20 @@ async function loadTokensFromSelfHosted(chainId: number): Promise<Token[] | null
       return null;
     }
     
-    return tokens.map((t: any) => ({
-      address: low(t.address || ''),
-      symbol: t.symbol || '',
-      name: t.name || '',
-      decimals: t.decimals || 18,
-    })).filter((t: any) => t.address).filter(isTokenAllowed);
+    return tokens.map((t: any) => {
+      // CRITICAL: Every token MUST have explicit decimals from on-chain data
+      // If decimals is missing, log warning as it indicates incomplete token data
+      const decimals = t.decimals ?? 18;
+      if (t.decimals === undefined) {
+        console.warn(`[TokenService] Token ${t.symbol} (${t.address}) on chain ${chainId} missing decimals - using default 18. This indicates incomplete token metadata.`);
+      }
+      return {
+        address: low(t.address || ''),
+        symbol: t.symbol || '',
+        name: t.name || '',
+        decimals: decimals,
+      };
+    }).filter((t: any) => t.address).filter(isTokenAllowed);
   } catch (e) {
     console.error(`Failed to load tokens from API for chain ${chainId}:`, e);
     return null;
@@ -146,6 +154,11 @@ export function getPlaceholderImage(): string {
 }
 
 export async function getTokenPriceUSD(address: string, decimals = 18, chainId?: number): Promise<number | null> {
+  // IMPORTANT: decimals parameter should be passed from token.decimals
+  // Log a warning if not provided (falling back to default 18)
+  if (decimals === 18) {
+    console.debug(`[TokenService] getTokenPriceUSD called for ${address} - using decimals=${decimals}. Ensure this matches the actual token decimals.`);
+  }
   const addr = low(address);
   const cid = (chainId === 1 || chainId === 137) ? chainId : config.chainId;
   try {

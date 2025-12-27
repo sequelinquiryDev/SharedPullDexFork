@@ -238,12 +238,17 @@ export const formatUSD = (v: number | null | undefined, forSuggestions: boolean 
 };
 
 // Format token amount with decimal awareness
+// IMPORTANT: The decimals parameter MUST be explicitly passed from token.decimals
+// Do NOT rely on the default value of 18 - always pass explicit decimals from token metadata
 export const formatTokenAmount = (v: number | null | undefined, decimals: number = 18): string => {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
   const n = Number(v);
   const absN = Math.abs(n);
   
-  // Calculate significant digits based on value
+  // Validate decimals parameter is reasonable (0-255 range for ERC20)
+  const validDecimals = Math.min(Math.max(decimals, 0), 255);
+  
+  // Calculate significant digits based on value magnitude and token's actual decimals
   let maxDecimals = 6;
   if (absN === 0) {
     maxDecimals = 2;
@@ -256,7 +261,7 @@ export const formatTokenAmount = (v: number | null | undefined, decimals: number
   } else if (absN >= 0.0001) {
     maxDecimals = 8;
   } else {
-    maxDecimals = Math.min(decimals, 12);
+    maxDecimals = Math.min(validDecimals, 12);
   }
   
   return n.toLocaleString('en-US', {

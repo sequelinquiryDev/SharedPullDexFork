@@ -56,8 +56,15 @@ async function fetch0xQuote(
       console.warn('[0x Quote] Invalid response - no buyAmount');
       return null;
     }
-    const normalized = Number(ethers.utils.formatUnits(j.buyAmount, j.buyTokenDecimals || 18));
-    console.log(`[0x Quote] Success: buyAmount=${j.buyAmount}, normalized=${normalized.toFixed(8)}`);
+    // CRITICAL: Always use explicit decimals from response. Never assume 18.
+    // If buyTokenDecimals is missing, log error instead of silently using default
+    const buyTokenDecimals = j.buyTokenDecimals;
+    if (buyTokenDecimals === undefined) {
+      console.warn('[0x Quote] CRITICAL: buyTokenDecimals missing from 0x response - accuracy may be compromised');
+    }
+    const decimals = buyTokenDecimals ?? 18; // Only use 18 if truly unavailable
+    const normalized = Number(ethers.utils.formatUnits(j.buyAmount, decimals));
+    console.log(`[0x Quote] Success: buyAmount=${j.buyAmount}, decimals=${decimals}, normalized=${normalized.toFixed(8)}`);
     return {
       source: '0x',
       toAmount: j.buyAmount,
@@ -81,9 +88,14 @@ async function fetchLifiQuote(
   walletAddress: string
 ): Promise<QuoteResult | null> {
   try {
+    // CRITICAL: toDecimals parameter MUST be explicitly provided from token.decimals
+    if (!toDecimals || toDecimals < 0 || toDecimals > 255) {
+      console.error(`[LIFI Quote] CRITICAL: Invalid toDecimals value: ${toDecimals} - cannot proceed with calculation`);
+      return null;
+    }
     const isBridge = fromChainId !== toChainId;
     const url = `/api/proxy/lifi/quote?fromChain=${fromChainId}&toChain=${toChainId}&fromToken=${encodeURIComponent(fromAddr)}&toToken=${encodeURIComponent(toAddr)}&fromAmount=${sellAmount}&fromAddress=${walletAddress}`;
-    console.log(`[LIFI Quote] Fetching ${isBridge ? 'bridge' : 'swap'} quote: chain ${fromChainId} -> ${toChainId} | From: ${walletAddress}`);
+    console.log(`[LIFI Quote] Fetching ${isBridge ? 'bridge' : 'swap'} quote: chain ${fromChainId} -> ${toChainId} | Using toDecimals=${toDecimals} | From: ${walletAddress}`);
     
     const resp = await fetchWithTimeout(url, {}, 8000);
     if (!resp.ok) {
@@ -96,7 +108,7 @@ async function fetchLifiQuote(
       return null;
     }
     const normalized = Number(ethers.utils.formatUnits(j.estimate.toAmount, toDecimals));
-    console.log(`[LIFI Quote] Success: toAmount=${j.estimate.toAmount}, normalized=${normalized.toFixed(8)}`);
+    console.log(`[LIFI Quote] Success: toAmount=${j.estimate.toAmount}, decimals=${toDecimals}, normalized=${normalized.toFixed(8)}`);
     return {
       source: 'lifi',
       toAmount: j.estimate.toAmount,

@@ -163,32 +163,51 @@ async function getOnChainAnalytics(address: string, chainId: number): Promise<On
 }
 
 // Dynamically reload all tokens from current tokens.json
+// IMPORTANT: This ensures watched tokens stay in sync with the dynamic token list
+// Every token MUST have decimals property for accurate math operations
 function reloadAllTokensForWatching() {
   try {
     const tokensPath = path.join(process.cwd(), 'client', 'src', 'lib', 'tokens.json');
     const tokensData = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
     const prevSize = watchedTokens.size;
+    let newTokensAdded = 0;
     
-    // Reload Ethereum tokens
+    // Reload Ethereum tokens with strict decimal validation
     if (tokensData.ethereum && Array.isArray(tokensData.ethereum)) {
       tokensData.ethereum.forEach((token: any) => {
         if (token.address) {
-          watchedTokens.add(`1-${token.address.toLowerCase()}`);
+          const key = `1-${token.address.toLowerCase()}`;
+          if (!watchedTokens.has(key)) {
+            newTokensAdded++;
+          }
+          watchedTokens.add(key);
+          // CRITICAL: Validate decimals exist for accurate calculations
+          if (token.decimals === undefined || token.decimals === null) {
+            console.warn(`[PriceRefresh] Ethereum token ${token.symbol} (${token.address}) missing decimals property`);
+          }
         }
       });
     }
     
-    // Reload Polygon tokens
+    // Reload Polygon tokens with strict decimal validation
     if (tokensData.polygon && Array.isArray(tokensData.polygon)) {
       tokensData.polygon.forEach((token: any) => {
         if (token.address) {
-          watchedTokens.add(`137-${token.address.toLowerCase()}`);
+          const key = `137-${token.address.toLowerCase()}`;
+          if (!watchedTokens.has(key)) {
+            newTokensAdded++;
+          }
+          watchedTokens.add(key);
+          // CRITICAL: Validate decimals exist for accurate calculations
+          if (token.decimals === undefined || token.decimals === null) {
+            console.warn(`[PriceRefresh] Polygon token ${token.symbol} (${token.address}) missing decimals property`);
+          }
         }
       });
     }
     
     if (watchedTokens.size !== prevSize) {
-      console.log(`[PriceRefresh] Updated watched tokens: ${prevSize} → ${watchedTokens.size}`);
+      console.log(`[PriceRefresh] Updated watched tokens: ${prevSize} → ${watchedTokens.size} (${newTokensAdded} new)`);
     }
   } catch (e) {
     console.error('[PriceRefresh] Error loading tokens:', e);
@@ -398,20 +417,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const existingToken = tokensList.find((t: any) => t.address.toLowerCase() === addr);
       
       if (!existingToken) {
-        // Token doesn't exist, add it permanently
+        // Token doesn't exist, add it permanently with EXPLICIT decimals from on-chain query
+        // CRITICAL: decimals MUST be included - this is essential for accurate math operations
         const newToken = {
           address: addr,
           symbol: symbol.toUpperCase(),
           name: symbol,
           marketCap: 0,
           logoURI: "",
-          decimals: Number(decimals)
+          decimals: Number(decimals) // Always include explicit decimals from contract
         };
+        
+        // Validate decimals before storing
+        if (Number.isNaN(newToken.decimals) || newToken.decimals < 0 || newToken.decimals > 255) {
+          console.error(`[TokenSearch] CRITICAL: Invalid decimals ${decimals} for token ${symbol} on chain ${cid}`);
+          return res.status(500).send("Invalid token decimals - cannot proceed");
+        }
         
         tokensList.push(newToken);
         tokensData[chainKey] = tokensList;
         
-        // Write back to file
+        // Write back to file with validated decimals
         fs.writeFileSync(tokensPath, JSON.stringify(tokensData, null, 2));
         
         // Immediately add to watched tokens for price refresh and analytics
@@ -420,7 +446,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Trigger single-flight token refresh to all connected clients
         triggerTokenRefresh();
         
-        console.log(`[TokenSearch] Added new token: ${symbol} (${addr}) chain ${cid} | Total watched: ${watchedTokens.size}`);
+        console.log(`[TokenSearch] Added new token: ${symbol} (${addr}) chain ${cid} | Decimals: ${decimals} | Total watched: ${watchedTokens.size}`);
       }
       
       res.json({ address: addr, symbol, decimals, name: symbol });
