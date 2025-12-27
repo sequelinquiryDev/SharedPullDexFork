@@ -41,7 +41,9 @@ const priceFetchingLocks = new Map<string, Promise<any>>();
 const iconCache = new Map<string, { url: string; expires: number }>();
 const iconFetchingInFlight = new Map<string, Promise<string>>();
 const iconRefreshTimers = new Map<string, NodeJS.Timeout>();
-const ICON_CACHE_TTL = 60 * 24 * 60 * 60 * 1000; // 60 days
+// CRITICAL: Node.js setTimeout has a max value of 2147483647ms (roughly 24.8 days)
+// We cap this at 24 days to avoid TimeoutOverflowWarning
+const ICON_CACHE_TTL = 24 * 24 * 60 * 60 * 1000; 
 
 // Analytics caching with 1-hour TTL
 interface CachedAnalytics {
@@ -155,12 +157,18 @@ async function getOnChainAnalytics(address: string, chainId: number): Promise<On
       // Store in analytics cache
       analyticsCache.set(cacheKey, { data: result, timestamp: Date.now() });
       
-      // Broadcast to all subscribers
+      // Broadcast to all subscribers efficiently
       const sub = analyticsSubscriptions.get(cacheKey);
       if (sub && sub.clients.size > 0) {
         const msg = JSON.stringify({ type: 'analytics', data: result, address, chainId });
         sub.clients.forEach(ws => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+          if (ws.readyState === WebSocket.OPEN) {
+            try {
+              ws.send(msg);
+            } catch (err) {
+              console.error(`[Analytics] Error broadcasting to client:`, err);
+            }
+          }
         });
       }
       
@@ -239,14 +247,17 @@ async function refreshAllAnalytics() {
       const [chainIdStr, address] = tokenKey.split('-');
       const chainId = Number(chainIdStr);
       
-      // Only refresh if we have subscribers or it's from the initial token list
+      // Check if we have active subscribers across all concurrent users
       const cacheKey = `analytics-${chainId}-${address}`;
       const sub = analyticsSubscriptions.get(cacheKey);
-      const hasSubs = sub && sub.clients.size > 0;
+      
+      // A token is considered "active" if it has actual clients OR is within its TTL window
+      const hasActiveSubs = sub && sub.clients.size > 0;
       const cached = analyticsCache.get(cacheKey);
       const isExpired = !cached || Date.now() - cached.timestamp >= ANALYTICS_CACHE_TTL;
     
-    if (hasSubs || isExpired) {
+    if (hasActiveSubs || isExpired) {
+      // Use the single-flight getOnChainAnalytics which handles concurrency internally
       await getOnChainAnalytics(address, chainId);
     }
   }
@@ -421,7 +432,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
 
           const aSub = analyticsSubscriptions.get(analyticsKey);
-          if (aSub && aSub.clients.has(ws)) {
+          if (aSub && aSub.clients instanceof Set && aSub.clients.has(ws)) {
             if (aSub.clients.size <= 1) {
               if (aSub.ttlTimer) clearTimeout(aSub.ttlTimer);
               aSub.ttlTimer = setTimeout(() => {
@@ -443,14 +454,40 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // ONLY unsubscribe when session ends (WebSocket closes)
       // This happens for ALL accumulated subscriptions in one go
       for (const key of sessionSubscriptions) {
-        activeSubscriptions.get(key)?.clients.delete(ws);
-        const [chainId, addr] = key.split('-');
-        unsubscribeToken(Number(chainId), addr);
+        const sub = activeSubscriptions.get(key);
+        if (sub) {
+          sub.clients.delete(ws);
+          // Only start TTL if NO active clients are left
+          if (sub.clients.size === 0) {
+            if (sub.ttlTimer) clearTimeout(sub.ttlTimer);
+            sub.ttlTimer = setTimeout(() => {
+              const currentSub = activeSubscriptions.get(key);
+              if (currentSub === sub && currentSub.clients.size === 0) {
+                activeSubscriptions.delete(key);
+                const [cid, addr] = key.split('-');
+                unsubscribeToken(Number(cid), addr);
+                console.log(`[WS] TTL expired (close): Unsubscribed from ${key}`);
+              }
+            }, 60000);
+          }
+        }
       }
       
       // Remove all analytics subscriptions for this client
       for (const analyticsKey of sessionAnalyticsSubscriptions) {
-        analyticsSubscriptions.get(analyticsKey)?.delete(ws);
+        const aSub = analyticsSubscriptions.get(analyticsKey);
+        if (aSub && aSub.clients instanceof Set) {
+          aSub.clients.delete(ws);
+          if (aSub.clients.size === 0) {
+            if (aSub.ttlTimer) clearTimeout(aSub.ttlTimer);
+            aSub.ttlTimer = setTimeout(() => {
+              const currentASub = analyticsSubscriptions.get(analyticsKey);
+              if (currentASub === aSub && currentASub.clients.size === 0) {
+                analyticsSubscriptions.delete(analyticsKey);
+              }
+            }, 60000);
+          }
+        }
       }
       
       console.log(`[WS] Client disconnected (unsubscribed from ${sessionSubscriptions.size} tokens)`);
