@@ -119,7 +119,7 @@ const V3_QUOTER_ABI = [
   "function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96) external returns (uint256 amountOut)"
 ];
 
-const V3_CONFIG: Record<number, { factory: string, quoter: string, fees: uint24[] }> = {
+const V3_CONFIG: Record<number, { factory: string, quoter: string, fees: number[] }> = {
   1: {
     factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
     quoter: "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6",
