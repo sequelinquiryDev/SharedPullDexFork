@@ -258,11 +258,13 @@ export function TokenInput({
       
       if (!newIcons.has(cacheKey)) {
         const iconUrl = getTokenLogoUrl(token, tokenChainId);
+        console.log(`[TokenInput] Icon Cache SET: ${cacheKey} => ${iconUrl}`);
         newIcons.set(cacheKey, iconUrl);
         changed = true;
       }
     });
     if (changed) {
+      console.log(`[TokenInput] Updating suggestion icons with ${newIcons.size} total icons`);
       setSuggestionIcons(newIcons);
     }
   }, [suggestions, chainId, chain]);
@@ -504,8 +506,9 @@ export function TokenInput({
           ) : (
             suggestions.map(({ token, stats, price }) => {
               const tokenChainId = (token as ExtendedToken).chainId || chainId;
-              const cacheKey = getIconCacheKey(token.address, tokenChainId);
-              const iconUrl = suggestionIcons.get(cacheKey);
+              const iconUrl = getTokenLogoUrl(token, tokenChainId);
+              
+              console.log(`[TokenInput] Rendering ${token.symbol} with iconUrl: ${iconUrl}`);
               
               const chainLabel = tokenChainId === 1 ? 'ETH' : tokenChainId === 137 ? 'POL' : null;
               return (
@@ -520,9 +523,10 @@ export function TokenInput({
                 >
                   <div className="suggestion-left">
                     <img 
-                      src={iconUrl || getPlaceholderImage()} 
+                      src={iconUrl} 
                       alt={token.symbol}
                       onError={(e) => {
+                        console.log(`[TokenInput] Image failed to load: ${(e.target as HTMLImageElement).src}`);
                         (e.target as HTMLImageElement).src = getPlaceholderImage();
                       }}
                     />

@@ -39,6 +39,7 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
   useEffect(() => {
     if (suggestions.length === 0) return;
 
+    console.log(`[TokenSearchBar] Icon effect triggered with ${suggestions.length} suggestions`);
     const newIcons = new Map(suggestionIcons);
     let changed = false;
     
@@ -48,12 +49,14 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
       
       if (!newIcons.has(cacheKey)) {
         const iconUrl = getTokenLogoUrl(token, tokenChainId);
+        console.log(`[TokenSearchBar] Icon Cache SET: ${cacheKey} => ${iconUrl}`);
         newIcons.set(cacheKey, iconUrl);
         changed = true;
       }
     });
     
     if (changed) {
+      console.log(`[TokenSearchBar] Updating suggestion icons with ${newIcons.size} total icons`);
       setSuggestionIcons(newIcons);
     }
   }, [suggestions, chain]);
@@ -347,8 +350,9 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
           ) : (
             suggestions.map(({ token, stats, price }) => {
               const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
-              const cacheKey = getIconCacheKey(token.address, tokenChainId);
-              const iconUrl = suggestionIcons.get(cacheKey);
+              const iconUrl = getTokenLogoUrl(token, tokenChainId);
+              
+              console.log(`[TokenSearchBar] Rendering ${token.symbol} with iconUrl: ${iconUrl}`);
               
               const chainLabel = tokenChainId === 1 ? 'ETH' : tokenChainId === 137 ? 'POL' : null;
               return (
@@ -360,10 +364,11 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
                 >
                   <div className="suggestion-left">
                     <img 
-                      src={iconUrl || getPlaceholderImage()} 
+                      src={iconUrl} 
                       alt={token.symbol}
                       style={{ width: '28px', height: '28px', borderRadius: '50%' }}
                       onError={(e) => {
+                        console.log(`[TokenSearchBar] Image failed to load: ${(e.target as HTMLImageElement).src}`);
                         (e.target as HTMLImageElement).src = getPlaceholderImage();
                       }}
                     />
