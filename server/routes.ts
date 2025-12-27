@@ -51,20 +51,24 @@ const watchedTokens = new Set<string>();
 const analyticsSubscriptions = new Map<string, Set<WebSocket>>();
 const analyticsFetchingLocks = new Map<string, Promise<any>>();
 
-const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: string; wethAddr: string; factories: string[] }> = {
+const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: string; wethAddr: string; factories: string[]; scanApi: string; scanKey: string }> = {
   1: {
     rpc: process.env.VITE_ETH_RPC_URL || "https://eth.llamarpc.com",
     usdcAddr: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     usdtAddr: "0xdac17f958d2ee523a2206206994597c13d831ec7",
     wethAddr: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-    factories: ["0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e37608"]
+    factories: ["0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e37608"],
+    scanApi: "https://api.etherscan.io/api",
+    scanKey: process.env.VITE_ETH_POL_API || ""
   },
   137: {
     rpc: process.env.VITE_POL_RPC_URL || "https://polygon-rpc.com",
     usdcAddr: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
     usdtAddr: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
     wethAddr: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
-    factories: ["0x5757371414417b8C6CAd16e5dBb0d812eEA2d29c", "0xc35DADB65012eC5796536bD9864eD8773aBc74C4"]
+    factories: ["0x5757371414417b8C6CAd16e5dBb0d812eEA2d29c", "0xc35DADB65012eC5796536bD9864eD8773aBc74C4"],
+    scanApi: "https://api.polygonscan.com/api",
+    scanKey: process.env.VITE_ETH_POL_API || ""
   }
 };
 
@@ -390,6 +394,33 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(analytics || {});
   });
 
+  // CRITICAL: Fetch decimals ONCE from Etherscan/Polygonscan API and cache forever
+  // Never fetch decimals again after initial fetch - use cached value always
+  async function fetchDecimalsFromScan(address: string, chainId: number): Promise<number | null> {
+    const config = CHAIN_CONFIG[chainId];
+    if (!config || !config.scanKey) {
+      console.warn(`[TokenSearch] VITE_ETH_POL_API not configured - cannot fetch decimals from scan`);
+      return null;
+    }
+    
+    try {
+      const url = `${config.scanApi}?module=account&action=tokenlist&address=${address}&apikey=${config.scanKey}`;
+      const response = await fetch(url, { timeout: 5000 });
+      if (!response.ok) return null;
+      
+      const data = await response.json();
+      if (data.status === "1" && data.result && Array.isArray(data.result) && data.result.length > 0) {
+        const token = data.result[0];
+        const decimals = Number(token.decimals);
+        console.log(`[TokenSearch] Fetched decimals from scan: ${address} = ${decimals}`);
+        return decimals;
+      }
+    } catch (e) {
+      console.error(`[TokenSearch] Error fetching from scan API:`, e);
+    }
+    return null;
+  }
+
   app.get("/api/tokens/search", async (req, res) => {
     const { address, chainId } = req.query;
     if (!address || !chainId) return res.status(400).send("Missing params");
@@ -401,14 +432,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!config) return res.status(400).send("Unsupported chain");
     
     try {
-      const provider = new ethers.providers.JsonRpcProvider(config.rpc);
-      const contract = new ethers.Contract(addr, ERC20_ABI, provider);
-      const [symbol, decimals] = await Promise.all([
-        contract.symbol(),
-        contract.decimals()
-      ]);
-      
-      // Check if token already exists in tokens.json
+      // Check if token already exists in tokens.json with cached decimals
       const tokensPath = path.join(process.cwd(), 'client', 'src', 'lib', 'tokens.json');
       const tokensData = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
       const chainKey = cid === 1 ? 'ethereum' : 'polygon';
@@ -416,16 +440,55 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       
       const existingToken = tokensList.find((t: any) => t.address.toLowerCase() === addr);
       
+      if (existingToken && existingToken.decimals !== undefined && existingToken.decimals !== null) {
+        // CACHED: Token exists with decimals - use cached value, NEVER refetch
+        console.log(`[TokenSearch] Using CACHED decimals for ${existingToken.symbol}: ${existingToken.decimals}`);
+        return res.json({ 
+          address: addr, 
+          symbol: existingToken.symbol, 
+          decimals: existingToken.decimals, 
+          name: existingToken.name 
+        });
+      }
+      
+      // Token doesn't exist or missing decimals - fetch from contract for symbol
+      const provider = new ethers.providers.JsonRpcProvider(config.rpc);
+      const contract = new ethers.Contract(addr, ERC20_ABI, provider);
+      let symbol: string;
+      let decimals: number;
+      
+      try {
+        symbol = await contract.symbol();
+      } catch {
+        symbol = "UNKNOWN";
+      }
+      
+      // CRITICAL: Fetch decimals from Etherscan/Polygonscan API first (more reliable)
+      // Only fall back to contract call if API fails
+      let decimalsFromScan = await fetchDecimalsFromScan(addr, cid);
+      if (decimalsFromScan !== null) {
+        decimals = decimalsFromScan;
+      } else {
+        // Fallback: fetch from contract
+        try {
+          decimals = await contract.decimals();
+          console.warn(`[TokenSearch] Fell back to contract call for decimals: ${addr}`);
+        } catch {
+          console.error(`[TokenSearch] Could not fetch decimals for ${addr} - using default 18`);
+          decimals = 18;
+        }
+      }
+      
       if (!existingToken) {
-        // Token doesn't exist, add it permanently with EXPLICIT decimals from on-chain query
-        // CRITICAL: decimals MUST be included - this is essential for accurate math operations
+        // NEW TOKEN: Add with decimals from Etherscan/Polygonscan or contract fallback
+        // These decimals will be CACHED forever and never refetched
         const newToken = {
           address: addr,
           symbol: symbol.toUpperCase(),
           name: symbol,
           marketCap: 0,
           logoURI: "",
-          decimals: Number(decimals) // Always include explicit decimals from contract
+          decimals: Number(decimals)
         };
         
         // Validate decimals before storing
@@ -437,7 +500,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         tokensList.push(newToken);
         tokensData[chainKey] = tokensList;
         
-        // Write back to file with validated decimals
+        // Write back to file with PERMANENT decimals - NEVER refetch
         fs.writeFileSync(tokensPath, JSON.stringify(tokensData, null, 2));
         
         // Immediately add to watched tokens for price refresh and analytics
@@ -446,11 +509,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Trigger single-flight token refresh to all connected clients
         triggerTokenRefresh();
         
-        console.log(`[TokenSearch] Added new token: ${symbol} (${addr}) chain ${cid} | Decimals: ${decimals} | Total watched: ${watchedTokens.size}`);
+        console.log(`[TokenSearch] ✓ Added new token: ${symbol} (${addr}) chain ${cid} | Decimals: ${decimals} (CACHED FOREVER) | Total watched: ${watchedTokens.size}`);
       }
       
       res.json({ address: addr, symbol, decimals, name: symbol });
     } catch (e) {
+      console.error(`[TokenSearch] Error:`, e);
       res.status(404).send("Token not found on-chain");
     }
   });
