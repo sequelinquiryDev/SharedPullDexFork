@@ -333,50 +333,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   wss.on('connection', (ws) => {
     tokenRefreshClients.add(ws);
-    let currentSub: string | null = null;
-    let currentAnalyticsSub: string | null = null;
-    ws.on('close', () => {
-      tokenRefreshClients.delete(ws);
-    });
+    const sessionSubscriptions = new Set<string>();           // Track all tokens client ever subscribed to
+    const sessionAnalyticsSubscriptions = new Set<string>();  // Track all analytics subscriptions in session
+    
     ws.on('message', async (msg) => {
       try {
         const data = JSON.parse(msg.toString());
         if (data.type === 'subscribe') {
           const key = `${data.chainId}-${data.address.toLowerCase()}`;
           
-          // Unsubscribe from previous token
-          if (currentSub && currentSub !== key) {
-            activeSubscriptions.get(currentSub)?.clients.delete(ws);
-            unsubscribeToken(Number(currentSub.split('-')[0]), currentSub.split('-')[1]);
+          // ACCUMULATION MODEL: Never unsubscribe during session, only on disconnect
+          // Add to price subscriptions (only if not already in session)
+          if (!sessionSubscriptions.has(key)) {
+            sessionSubscriptions.add(key);
+            subscribeToken(data.chainId, data.address);
+            
+            if (!activeSubscriptions.has(key)) {
+              activeSubscriptions.set(key, { clients: new Set(), lastSeen: Date.now() });
+            }
+            activeSubscriptions.get(key)!.clients.add(ws);
+            console.log(`[WS] Client subscribed to ${key} (session count: ${sessionSubscriptions.size})`);
           }
           
-          // Subscribe to new token using dynamic watchlist manager
-          currentSub = key;
-          subscribeToken(data.chainId, data.address);
-          
-          if (!activeSubscriptions.has(key)) {
-            activeSubscriptions.set(key, { clients: new Set(), lastSeen: Date.now() });
-          }
-          activeSubscriptions.get(key)!.clients.add(ws);
           activeSubscriptions.get(key)!.lastSeen = Date.now();
           
-          // Also subscribe to analytics for this token
-          const analyticsKey = `analytics-${data.chainId}-${data.address.toLowerCase()}`;
-          if (currentAnalyticsSub && currentAnalyticsSub !== analyticsKey) {
-            analyticsSubscriptions.get(currentAnalyticsSub)?.delete(ws);
+          // Add to analytics subscriptions (only if not already in session)
+          const analyticsKey = `analytics-${key}`;
+          if (!sessionAnalyticsSubscriptions.has(analyticsKey)) {
+            sessionAnalyticsSubscriptions.add(analyticsKey);
+            if (!analyticsSubscriptions.has(analyticsKey)) {
+              analyticsSubscriptions.set(analyticsKey, new Set());
+            }
+            analyticsSubscriptions.get(analyticsKey)!.add(ws);
+            console.log(`[WS] Client subscribed to analytics for ${key} (session analytics count: ${sessionAnalyticsSubscriptions.size})`);
           }
-          currentAnalyticsSub = analyticsKey;
-          if (!analyticsSubscriptions.has(analyticsKey)) {
-            analyticsSubscriptions.set(analyticsKey, new Set());
-          }
-          analyticsSubscriptions.get(analyticsKey)!.add(ws);
           
+          // Send initial price data to client
           const price = await fetchPriceAggregated(data.address, data.chainId);
           if (price && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'price', data: price, address: data.address, chainId: data.chainId }));
           }
           
-          // Send latest analytics
+          // Send initial analytics data to client
+          // Background cache will update this token's analytics
           const analytics = await getOnChainAnalytics(data.address, data.chainId);
           if (analytics && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'analytics', data: analytics, address: data.address, chainId: data.chainId }));
@@ -386,13 +385,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         console.error('[WS] Message error:', e);
       }
     });
+    
     ws.on('close', () => {
-      if (currentSub) {
-        activeSubscriptions.get(currentSub)?.clients.delete(ws);
-        const [chainId, addr] = currentSub.split('-');
+      // ONLY unsubscribe when session ends (WebSocket closes)
+      // This happens for ALL accumulated subscriptions in one go
+      for (const key of sessionSubscriptions) {
+        activeSubscriptions.get(key)?.clients.delete(ws);
+        const [chainId, addr] = key.split('-');
         unsubscribeToken(Number(chainId), addr);
       }
-      if (currentAnalyticsSub) analyticsSubscriptions.get(currentAnalyticsSub)?.delete(ws);
+      
+      // Remove all analytics subscriptions for this client
+      for (const analyticsKey of sessionAnalyticsSubscriptions) {
+        analyticsSubscriptions.get(analyticsKey)?.delete(ws);
+      }
+      
+      console.log(`[WS] Client disconnected (unsubscribed from ${sessionSubscriptions.size} tokens)`);
       tokenRefreshClients.delete(ws);
     });
   });
