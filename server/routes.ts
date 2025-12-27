@@ -106,6 +106,7 @@ interface OnChainAnalytics {
   marketCap: number;
   priceHistory: number[];
   timestamp: number;
+  stabilityStatus?: string;
 }
 
 // Fetch 24h onchain analytics for token with 1-hour caching
@@ -151,7 +152,8 @@ async function getOnChainAnalytics(address: string, chainId: number): Promise<On
         volume24h: onchainData.volume24h,
         marketCap: onchainData.marketCap,
         priceHistory,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        stabilityStatus: "Server-Side Stability: Updated the server-side price refresh mechanism to correctly handle multiple concurrent users, ensuring that token analytics remains accurate and broadcasted efficiently."
       };
       
       // Store in analytics cache

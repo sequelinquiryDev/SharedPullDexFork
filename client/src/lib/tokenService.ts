@@ -165,7 +165,7 @@ export async function getTokenPriceUSD(address: string, decimals = 18, chainId?:
     const res = await fetch(`/api/prices/onchain?address=${addr}&chainId=${cid}`);
     if (res.ok) {
       const data = await res.json();
-      return data.price || null;
+      return data?.price ?? null;
     }
   } catch (e) { console.error('Price fetch error:', e); }
   return null;
@@ -240,6 +240,7 @@ export interface OnChainAnalytics {
   marketCap: number;
   priceHistory: number[];
   timestamp: number;
+  stabilityStatus?: string;
 }
 
 export async function getOnChainAnalytics(address: string, chainId?: number): Promise<OnChainAnalytics | null> {
