@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, getTokenLogoUrl } from '@/lib/tokenService';
+import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, getTokenLogoUrl, getIconCacheKey } from '@/lib/tokenService';
 import { formatUSD, low, isAddress, type OnChainPrice } from '@/lib/config';
 import { useChain } from '@/lib/chainContext';
 import { useTokenSelection } from '@/lib/tokenSelectionContext';
@@ -39,15 +39,24 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
   useEffect(() => {
     if (suggestions.length === 0) return;
 
+    const newIcons = new Map(suggestionIcons);
+    let changed = false;
+    
     suggestions.forEach(({ token }) => {
       const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
-      const cacheKey = `${tokenChainId}-${token.address.toLowerCase()}`;
+      const cacheKey = getIconCacheKey(token.address, tokenChainId);
       
-      if (!suggestionIcons.has(cacheKey)) {
-        setSuggestionIcons((prev) => new Map(prev).set(cacheKey, getTokenLogoUrl(token, tokenChainId)));
+      if (!newIcons.has(cacheKey)) {
+        const iconUrl = getTokenLogoUrl(token, tokenChainId);
+        newIcons.set(cacheKey, iconUrl);
+        changed = true;
       }
     });
-  }, [suggestions.length, chain]);
+    
+    if (changed) {
+      setSuggestionIcons(newIcons);
+    }
+  }, [suggestions, chain]);
 
   const handleSearch = useCallback(async (query: string) => {
     // BRG mode: search both chains; otherwise single chain
@@ -337,7 +346,10 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
             <div style={{ padding: '12px', textAlign: 'center', opacity: 0.7 }}>No {chain === 'BRG' ? 'ETH/POL' : chain} tokens found</div>
           ) : (
             suggestions.map(({ token, stats, price }) => {
-              const tokenChainId = (token as ExtendedToken).chainId;
+              const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
+              const cacheKey = getIconCacheKey(token.address, tokenChainId);
+              const iconUrl = suggestionIcons.get(cacheKey);
+              
               const chainLabel = tokenChainId === 1 ? 'ETH' : tokenChainId === 137 ? 'POL' : null;
               return (
                 <div
@@ -348,7 +360,7 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
                 >
                   <div className="suggestion-left">
                     <img 
-                      src={suggestionIcons.get(`${tokenChainId || (chain === 'ETH' ? 1 : 137)}-${token.address.toLowerCase()}`) || getPlaceholderImage()} 
+                      src={iconUrl || getPlaceholderImage()} 
                       alt={token.symbol}
                       style={{ width: '28px', height: '28px', borderRadius: '50%' }}
                       onError={(e) => {

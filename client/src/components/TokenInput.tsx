@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, loadTokensForChain, getTokenLogoUrl, getTokenPriceUSD, fetchTokenIcon } from '@/lib/tokenService';
+import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, loadTokensForChain, getTokenLogoUrl, getTokenPriceUSD, fetchTokenIcon, getIconCacheKey } from '@/lib/tokenService';
 import { formatUSD, low, isAddress, type OnChainPrice } from '@/lib/config';
 import { useChain } from '@/lib/chainContext';
 import { subscribeToPrice, connectPriceService } from '@/lib/priceService';
@@ -254,10 +254,11 @@ export function TokenInput({
     let changed = false;
     suggestions.forEach(({ token }) => {
       const tokenChainId = (token as ExtendedToken).chainId || chainId;
-      const cacheKey = `${tokenChainId || chainId}-${token.address.toLowerCase()}`;
+      const cacheKey = getIconCacheKey(token.address, tokenChainId);
       
       if (!newIcons.has(cacheKey)) {
-        newIcons.set(cacheKey, getTokenLogoUrl(token, tokenChainId));
+        const iconUrl = getTokenLogoUrl(token, tokenChainId);
+        newIcons.set(cacheKey, iconUrl);
         changed = true;
       }
     });
@@ -502,7 +503,10 @@ export function TokenInput({
             <div style={{ padding: '12px', textAlign: 'center', opacity: 0.7 }}>No {chain === 'BRG' ? 'ETH/POL' : chain} tokens found</div>
           ) : (
             suggestions.map(({ token, stats, price }) => {
-              const tokenChainId = (token as ExtendedToken).chainId;
+              const tokenChainId = (token as ExtendedToken).chainId || chainId;
+              const cacheKey = getIconCacheKey(token.address, tokenChainId);
+              const iconUrl = suggestionIcons.get(cacheKey);
+              
               const chainLabel = tokenChainId === 1 ? 'ETH' : tokenChainId === 137 ? 'POL' : null;
               return (
                 <div
@@ -516,7 +520,7 @@ export function TokenInput({
                 >
                   <div className="suggestion-left">
                     <img 
-                      src={suggestionIcons.get(`${tokenChainId || chainId}-${token.address.toLowerCase()}`) || getPlaceholderImage()} 
+                      src={iconUrl || getPlaceholderImage()} 
                       alt={token.symbol}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = getPlaceholderImage();

@@ -205,6 +205,10 @@ export async function getTokenByAddress(address: string, chainId?: number): Prom
   return null;
 }
 
+export function getIconCacheKey(address: string, chainId: number): string {
+  return `${chainId}-${address.toLowerCase()}`;
+}
+
 export function getTokenLogoUrl(token: Token, chainId?: number): string {
   if (!token || !token.address) return getPlaceholderImage();
   const cid = chainId ?? config.chainId;
