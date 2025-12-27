@@ -6,6 +6,8 @@ import path from "path";
 import { ethers } from "ethers";
 import { WebSocketServer, WebSocket } from "ws";
 import { ensureTokenListExists } from "./tokenUpdater";
+import { subscribeToken, unsubscribeToken, getActiveTokens, getMetrics } from "./watchlistManager";
+import { startHourlyRefreshScheduler, scheduleNewTokenRefresh } from "./hourlyRefreshScheduler";
 
 // Single-flight token refresh mechanism
 let tokenRefreshTimer: NodeJS.Timeout | null = null;
@@ -73,23 +75,24 @@ const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: st
 };
 
 async function getOnChainPrice(address: string, chainId: number): Promise<OnChainPrice | null> {
-  const cacheKey = `${chainId}-${address.toLowerCase()}`;
-  const config = CHAIN_CONFIG[chainId];
-  if (!config) return null;
-
+  const { fetchOnChainData } = await import("./onchainDataFetcher");
+  
   try {
-    const provider = new ethers.providers.JsonRpcProvider(config.rpc);
-    const tokenAddr = address.toLowerCase();
+    const data = await fetchOnChainData(address, chainId);
+    if (!data) return null;
     
-    // For contract search/metadata (metadata is already handled by /api/tokens/search)
-    // Here we focus on the real price logic
-    // This is where real on-chain price discovery should be implemented
-    const price = Math.random() * 100; // Placeholder for real price discovery logic
+    const result: OnChainPrice = {
+      price: data.price,
+      mc: data.marketCap,
+      volume: data.volume24h,
+      timestamp: data.timestamp,
+    };
     
-    const result = { price, mc: 0, volume: 0, timestamp: Date.now() };
+    const cacheKey = `${chainId}-${address.toLowerCase()}`;
     onChainCache.set(cacheKey, result);
     return result;
   } catch (e) {
+    console.error("[OnChainPrice] Error:", e);
     return null;
   }
 }
@@ -119,24 +122,31 @@ async function getOnChainAnalytics(address: string, chainId: number): Promise<On
 
   const promise = (async () => {
     try {
-      // Generate realistic mock 24h analytics (1-hour intervals: 24 data points)
+      const { fetchOnChainData } = await import("./onchainDataFetcher");
+      const onchainData = await fetchOnChainData(address, chainId);
+      
+      if (!onchainData) {
+        console.warn(`[Analytics] Could not fetch on-chain data for ${address} on chain ${chainId}`);
+        return null;
+      }
+
+      // Generate realistic 24h price history based on actual change24h
       const priceHistory: number[] = [];
-      let currentPrice = 100;
-      const change24h = (Math.random() - 0.5) * 50; // -25 to +25%
-      const targetPrice = 100 * (1 + change24h / 100);
-      const volatility = Math.abs(change24h) * 0.3;
+      let currentPrice = onchainData.price;
+      const targetPrice = currentPrice * (1 + onchainData.change24h / 100);
+      const volatility = Math.abs(onchainData.change24h) * 0.3;
       
       for (let i = 0; i < 24; i++) {
         const noise = (Math.random() - 0.5) * volatility;
         const trend = (targetPrice - currentPrice) * 0.15;
-        currentPrice = Math.max(currentPrice + trend + noise, 1);
+        currentPrice = Math.max(currentPrice + trend + noise, onchainData.price * 0.5);
         priceHistory.push(currentPrice);
       }
       
       const result: OnChainAnalytics = {
-        change24h,
-        volume24h: Math.random() * 10000000,
-        marketCap: Math.random() * 1000000000,
+        change24h: onchainData.change24h,
+        volume24h: onchainData.volume24h,
+        marketCap: onchainData.marketCap,
         priceHistory,
         timestamp: Date.now()
       };
@@ -155,7 +165,7 @@ async function getOnChainAnalytics(address: string, chainId: number): Promise<On
       
       return result;
     } catch (e) {
-      console.error('Analytics fetch error:', e);
+      console.error('[Analytics] fetch error:', e);
       return null;
     } finally {
       analyticsFetchingLocks.delete(cacheKey);
@@ -248,10 +258,10 @@ function startUnconditionalPriceRefresh() {
   
   // Unconditionally refresh prices every 25 seconds (no reload, just refresh cache)
   setInterval(async () => {
-    const tokenArray = Array.from(watchedTokens);
-    console.log(`[PriceCache] Refreshing ${tokenArray.length} tokens (server-side caching only)...`);
+    const activeTokens = getActiveTokens();
+    console.log(`[PriceCache] Refreshing ${activeTokens.length} tokens (server-side caching only)...`);
     
-    for (const tokenKey of tokenArray) {
+    for (const tokenKey of activeTokens) {
       const [chainIdStr, address] = tokenKey.split('-');
       const chainId = Number(chainIdStr);
       
@@ -264,15 +274,10 @@ function startUnconditionalPriceRefresh() {
   }, PRICE_REFRESH_INTERVAL);
 }
 
-// Start automatic analytics refresh every 1 hour (separate from prices)
+// DEPRECATED: Use hourlyRefreshScheduler instead for GMT/UTC aligned hourly refresh
+// This function is kept for backwards compatibility but not used
 function startAnalyticsRefreshTimer() {
-  // Initial load once
-  refreshAllAnalytics();
-  
-  // Refresh every 1 hour (don't reload tokens, they're already tracked)
-  setInterval(() => {
-    refreshAllAnalytics();
-  }, ANALYTICS_CACHE_TTL);
+  console.log("[Routes] Analytics refresh now handled by hourlyRefreshScheduler");
 }
 
 async function fetchPriceAggregated(address: string, chainId: number) {
@@ -317,8 +322,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Start unconditional 25-second price refresh for all dynamic tokens
   startUnconditionalPriceRefresh();
   
-  // Start analytics caching and refresh timer
-  startAnalyticsRefreshTimer();
+  // Start hourly refresh scheduler (GMT/UTC aligned)
+  startHourlyRefreshScheduler();
 
   const wss = new WebSocketServer({ server: httpServer, path: '/api/ws/prices' });
 
@@ -334,9 +339,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const data = JSON.parse(msg.toString());
         if (data.type === 'subscribe') {
           const key = `${data.chainId}-${data.address.toLowerCase()}`;
-          if (currentSub) activeSubscriptions.get(currentSub)?.clients.delete(ws);
+          
+          // Unsubscribe from previous token
+          if (currentSub && currentSub !== key) {
+            activeSubscriptions.get(currentSub)?.clients.delete(ws);
+            unsubscribeToken(Number(currentSub.split('-')[0]), currentSub.split('-')[1]);
+          }
+          
+          // Subscribe to new token using dynamic watchlist manager
           currentSub = key;
-          if (!activeSubscriptions.has(key)) activeSubscriptions.set(key, { clients: new Set(), lastSeen: Date.now() });
+          subscribeToken(data.chainId, data.address);
+          
+          if (!activeSubscriptions.has(key)) {
+            activeSubscriptions.set(key, { clients: new Set(), lastSeen: Date.now() });
+          }
           activeSubscriptions.get(key)!.clients.add(ws);
           activeSubscriptions.get(key)!.lastSeen = Date.now();
           
@@ -348,12 +364,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           currentAnalyticsSub = analyticsKey;
           if (!analyticsSubscriptions.has(analyticsKey)) {
             analyticsSubscriptions.set(analyticsKey, new Set());
-            watchedTokens.add(`${data.chainId}-${data.address.toLowerCase()}`);
           }
           analyticsSubscriptions.get(analyticsKey)!.add(ws);
           
           const price = await fetchPriceAggregated(data.address, data.chainId);
-          if (price && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'price', data: price, address: data.address, chainId: data.chainId }));
+          if (price && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'price', data: price, address: data.address, chainId: data.chainId }));
+          }
           
           // Send latest analytics
           const analytics = await getOnChainAnalytics(data.address, data.chainId);
@@ -361,11 +378,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             ws.send(JSON.stringify({ type: 'analytics', data: analytics, address: data.address, chainId: data.chainId }));
           }
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('[WS] Message error:', e);
+      }
     });
     ws.on('close', () => {
-      if (currentSub) activeSubscriptions.get(currentSub)?.clients.delete(ws);
+      if (currentSub) {
+        activeSubscriptions.get(currentSub)?.clients.delete(ws);
+        const [chainId, addr] = currentSub.split('-');
+        unsubscribeToken(Number(chainId), addr);
+      }
       if (currentAnalyticsSub) analyticsSubscriptions.get(currentAnalyticsSub)?.delete(ws);
+      tokenRefreshClients.delete(ws);
     });
   });
 
@@ -503,13 +527,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         // Write back to file with PERMANENT decimals - NEVER refetch
         fs.writeFileSync(tokensPath, JSON.stringify(tokensData, null, 2));
         
-        // Immediately add to watched tokens for price refresh and analytics
-        watchedTokens.add(`${cid}-${addr}`);
+        // Register new token for immediate and hourly refresh
+        scheduleNewTokenRefresh(cid, addr);
         
         // Trigger single-flight token refresh to all connected clients
         triggerTokenRefresh();
         
-        console.log(`[TokenSearch] ✓ Added new token: ${symbol} (${addr}) chain ${cid} | Decimals: ${decimals} (CACHED FOREVER) | Total watched: ${watchedTokens.size}`);
+        const metrics = getMetrics();
+        console.log(`[TokenSearch] ✓ Added new token: ${symbol} (${addr}) chain ${cid} | Decimals: ${decimals} (CACHED FOREVER) | Watched tokens: ${metrics.totalWatchedTokens}`);
       }
       
       res.json({ address: addr, symbol, decimals, name: symbol });
@@ -678,6 +703,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     iconFetchingInFlight.delete(cacheKey);
     
     res.redirect(url);
+  });
+
+  // Monitoring endpoint for scalability verification
+  app.get("/api/system/metrics", async (req, res) => {
+    const { getCacheMetrics } = await import("./onchainDataFetcher");
+    const { getRefreshStatus } = await import("./hourlyRefreshScheduler");
+    
+    const watchlistMetrics = getMetrics();
+    const cacheMetrics = getCacheMetrics();
+    const refreshStatus = getRefreshStatus();
+    
+    res.json({
+      watchlist: watchlistMetrics,
+      cache: cacheMetrics,
+      refresh: refreshStatus,
+      timestamp: new Date().toISOString(),
+    });
   });
 
   return httpServer;
