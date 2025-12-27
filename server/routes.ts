@@ -467,6 +467,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
     
     const promise = (async () => {
+      console.log(`[Icon] Fetching for ${addr} on chain ${cid}`);
       // 1. Try to get logoURI from tokens.json first (highest priority)
       try {
         const tokensPath = path.join(process.cwd(), 'client', 'src', 'lib', 'tokens.json');

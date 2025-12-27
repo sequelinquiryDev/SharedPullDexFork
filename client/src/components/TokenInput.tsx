@@ -356,14 +356,18 @@ export function TokenInput({
           flex: selectedToken ? undefined : 0,
         }}>
           <div className="token-icon" style={{ position: 'relative', width: '28px', height: '28px' }}>
-            <img
-              src={selectedTokenIcon || getPlaceholderImage()}
-              alt={selectedToken?.symbol || "Select token"}
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = getPlaceholderImage();
-              }}
-              data-testid={`img-token-${side}`}
-            />
+            {selectedTokenIcon ? (
+              <img
+                src={selectedTokenIcon}
+                alt={selectedToken?.symbol || "Select token"}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = getPlaceholderImage();
+                }}
+                data-testid={`img-token-${side}`}
+              />
+            ) : (
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+            )}
           </div>
           <input
             ref={inputRef}

@@ -208,8 +208,9 @@ export async function getTokenByAddress(address: string, chainId?: number): Prom
 export function getTokenLogoUrl(token: Token, chainId?: number): string {
   if (!token || !token.address) return getPlaceholderImage();
   const cid = chainId ?? config.chainId;
-  // Always use the address from the token object, lowercase it for the server
-  return `/api/icon?address=${token.address.toLowerCase()}&chainId=${cid}`;
+  const url = `/api/icon?address=${token.address.toLowerCase()}&chainId=${cid}`;
+  console.log(`[tokenService] Generated icon URL for ${token.symbol}: ${url}`);
+  return url;
 }
 
 export async function fetchTokenIcon(token: Token, chainId?: number): Promise<string> {
