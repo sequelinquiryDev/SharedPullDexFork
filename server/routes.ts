@@ -38,44 +38,7 @@ const SUBSCRIPTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 const activeSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number, ttlTimer?: NodeJS.Timeout }>();
 const priceFetchingLocks = new Map<string, Promise<any>>();
 
-const iconCache = new Map<string, { url: string; expires: number }>();
-const iconFetchingInFlight = new Map<string, Promise<string>>();
-const iconRefreshTimers = new Map<string, NodeJS.Timeout>();
-// CRITICAL: Node.js setTimeout has a max value of 2147483647ms (roughly 24.8 days)
-// We cap this at 24 days to avoid TimeoutOverflowWarning
-const ICON_CACHE_TTL = 24 * 24 * 60 * 60 * 1000; 
-
-// Analytics caching with 1-hour TTL
-interface CachedAnalytics {
-  data: OnChainAnalytics;
-  timestamp: number;
-}
-const analyticsCache = new Map<string, CachedAnalytics>();
-const ANALYTICS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
-const watchedTokens = new Set<string>();
-const analyticsSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number, ttlTimer?: NodeJS.Timeout }>();
-const analyticsFetchingLocks = new Map<string, Promise<any>>();
-
-const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: string; wethAddr: string; factories: string[]; scanApi: string; scanKey: string }> = {
-  1: {
-    rpc: process.env.VITE_ETH_RPC_URL || "https://eth.llamarpc.com",
-    usdcAddr: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-    usdtAddr: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-    wethAddr: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-    factories: ["0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e37608"],
-    scanApi: "https://api.etherscan.io/api",
-    scanKey: process.env.VITE_ETH_POL_API || ""
-  },
-  137: {
-    rpc: process.env.VITE_POL_RPC_URL || "https://polygon-rpc.com",
-    usdcAddr: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
-    usdtAddr: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
-    wethAddr: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
-    factories: ["0x5757371414417b8C6CAd16e5dBb0d812eEA2d29c", "0xc35DADB65012eC5796536bD9864eD8773aBc74C4"],
-    scanApi: "https://api.polygonscan.com/api",
-    scanKey: process.env.VITE_ETH_POL_API || ""
-  }
-};
+// ... existing code ...
 
 async function getOnChainPrice(address: string, chainId: number): Promise<OnChainPrice | null> {
   const { fetchOnChainData } = await import("./onchainDataFetcher");
@@ -94,16 +57,20 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
     const cacheKey = `${chainId}-${address.toLowerCase()}`;
     
     // Smart caching: delete old data if new data arrived to prevent contamination
-    onChainCache.delete(cacheKey);
-    onChainCache.set(cacheKey, result);
+    // ENSURE IMMEDIATE SINGLEFLIGHT TO SUBSCRIBERS
+    const existing = onChainCache.get(cacheKey);
+    if (!existing || existing.price !== result.price) {
+      onChainCache.delete(cacheKey);
+      onChainCache.set(cacheKey, result);
 
-    // Immediate singleflight to connected subscribers on new data arrival
-    const sub = activeSubscriptions.get(cacheKey);
-    if (sub && sub.clients.size > 0) {
-      const msg = JSON.stringify({ type: 'price', data: result, address, chainId });
-      sub.clients.forEach(ws => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(msg);
-      });
+      // Immediate singleflight to connected subscribers
+      const sub = activeSubscriptions.get(cacheKey);
+      if (sub && sub.clients.size > 0) {
+        const msg = JSON.stringify({ type: 'price', data: result, address, chainId });
+        sub.clients.forEach(ws => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+        });
+      }
     }
 
     return result;
@@ -287,22 +254,26 @@ function startUnconditionalPriceRefresh() {
   
   // Unconditionally refresh prices every 1 minute
   setInterval(async () => {
-    // Get all tokens from our existed dynamic tokens system
-    const activeTokens = getActiveTokens();
-    console.log(`[PriceCache] Unconditionally refreshing ${activeTokens.length} tokens (1m cycle)...`);
+    // Reload watched tokens to ensure we have the latest from dynamic tokens list
+    reloadAllTokensForWatching();
+    
+    const activeTokens = Array.from(watchedTokens);
+    console.log(`[PriceCache] Unconditionally refreshing ${activeTokens.length} dynamic tokens (1m cycle)...`);
     
     for (const tokenKey of activeTokens) {
       const [chainIdStr, address] = tokenKey.split('-');
       const chainId = Number(chainIdStr);
       
       // Force on-chain fetch by bypassing cache for the 1-minute global refresh
-      // This ensures we have fresh data to potentially broadcast
-      const price = await getOnChainPrice(address, chainId);
+      // We pass bypassCache=true to ensure we hit on-chain every minute
+      const { fetchOnChainData, invalidateCache } = await import("./onchainDataFetcher");
+      invalidateCache(address, chainId); // Clear fetcher internal cache
       
+      const price = await getOnChainPrice(address, chainId);
       // broadcast is handled inside getOnChainPrice via the smart caching logic
     }
     
-    console.log('[PriceCache] Refresh complete');
+    console.log('[PriceCache] Dynamic tokens refresh complete');
   }, PRICE_REFRESH_INTERVAL);
 }
 
@@ -393,13 +364,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           
           activeSubscriptions.get(key)!.lastSeen = Date.now();
 
-          // Immediately send server cached price to new subscriber
+          // Client Imeadietly requests price from server cachings when SUBSCRIBED
           const cachedPrice = onChainCache.get(key);
           if (cachedPrice && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'price', data: cachedPrice, address: data.address, chainId: data.chainId }));
-          } else if (!cachedPrice) {
+          } else {
             // If server doesn't have caching, initiate direct fetch and broadcast
-            fetchPriceAggregated(data.address, data.chainId);
+            // This happens when a new token is added or cache is empty
+            getOnChainPrice(data.address, data.chainId);
           }
           
           const analyticsKey = `analytics-${key}`;
