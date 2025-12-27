@@ -478,7 +478,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Remove all analytics subscriptions for this client
       for (const analyticsKey of sessionAnalyticsSubscriptions) {
         const aSub = analyticsSubscriptions.get(analyticsKey);
-        if (aSub && aSub.clients instanceof Set) {
+        if (aSub && aSub.clients) {
           aSub.clients.delete(ws);
           if (aSub.clients.size === 0) {
             if (aSub.ttlTimer) clearTimeout(aSub.ttlTimer);
