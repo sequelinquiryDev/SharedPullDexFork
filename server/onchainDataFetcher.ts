@@ -11,7 +11,7 @@ import { ethers } from "ethers";
 const CHAIN_CONFIG: Record<
   number,
   {
-    rpc: string;
+    rpc: string[];
     usdcAddr: string;
     usdtAddr: string;
     wethAddr: string;
@@ -19,7 +19,11 @@ const CHAIN_CONFIG: Record<
   }
 > = {
   1: {
-    rpc: process.env.VITE_ETH_RPC_URL || "https://eth.llamarpc.com",
+    rpc: [
+      process.env.VITE_ETH_RPC_URL || "https://eth.llamarpc.com",
+      "https://rpc.ankr.com/eth",
+      "https://cloudflare-eth.com"
+    ],
     usdcAddr: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     usdtAddr: "0xdac17f958d2ee523a2206206994597c13d831ec7",
     wethAddr: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
@@ -29,11 +33,15 @@ const CHAIN_CONFIG: Record<
       "0x115934131916C8b277dd010Ee02de363c09d037c", // ShibaSwap
       "0x01af51A2f11B10025D8F0429408544B9E4936A00", // Kyber V2
       "0xBA12222222228d8Ba445958a75a0704d566BF2C8", // Balancer V2 Vault
-      "0x1f98431c8ad98523631ae4a59f267346ea31f984", // Uniswap V3 Factory
+      "0x1f98431c8ad98523631ae4a59f267346ea31F984", // Uniswap V3 Factory
     ],
   },
   137: {
-    rpc: process.env.VITE_POL_RPC_URL || "https://polygon-rpc.com",
+    rpc: [
+      process.env.VITE_POL_RPC_URL || "https://polygon-rpc.com",
+      "https://rpc.ankr.com/polygon",
+      "https://polygon-bor-rpc.publicnode.com"
+    ],
     usdcAddr: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
     usdtAddr: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
     wethAddr: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
@@ -46,6 +54,23 @@ const CHAIN_CONFIG: Record<
     ],
   },
 };
+
+// Helper to get provider with fallback
+async function getProvider(chainId: number): Promise<ethers.providers.JsonRpcProvider> {
+  const config = CHAIN_CONFIG[chainId];
+  if (!config) throw new Error(`No config for chain ${chainId}`);
+  
+  for (const url of config.rpc) {
+    try {
+      const provider = new ethers.providers.JsonRpcProvider(url);
+      await provider.getNetwork();
+      return provider;
+    } catch (e) {
+      console.warn(`[OnChainFetcher] RPC failed: ${url}. Trying next...`);
+    }
+  }
+  throw new Error(`All RPCs failed for chain ${chainId}`);
+}
 
 const ERC20_ABI = [
   "function decimals() view returns (uint8)",
@@ -114,40 +139,44 @@ async function fetchTokenPriceFromV3(
   const config = CHAIN_CONFIG[chainId];
   const STABLES = [config.usdcAddr, config.usdtAddr, config.wethAddr];
   
-  const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, provider);
-  const decimals = await tokenContract.decimals();
-  const amountIn = ethers.utils.parseUnits("1", decimals);
+  try {
+    const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, provider);
+    const decimals = await tokenContract.decimals();
+    const amountIn = ethers.utils.parseUnits("1", decimals);
 
-  for (const stable of STABLES) {
-    if (tokenAddr.toLowerCase() === stable.toLowerCase()) continue;
-    
-    for (const fee of v3.fees) {
-      try {
-        const quoter = new ethers.Contract(v3.quoter, V3_QUOTER_ABI, provider);
-        // staticCall to avoid gas estimation/execution
-        const amountOut = await quoter.callStatic.quoteExactInputSingle(
-          tokenAddr,
-          stable,
-          fee,
-          amountIn,
-          0
-        );
+    for (const stable of STABLES) {
+      if (tokenAddr.toLowerCase() === stable.toLowerCase()) continue;
+      
+      for (const fee of v3.fees) {
+        try {
+          const quoter = new ethers.Contract(v3.quoter, V3_QUOTER_ABI, provider);
+          // staticCall to avoid gas estimation/execution
+          const amountOut = await quoter.callStatic.quoteExactInputSingle(
+            tokenAddr,
+            stable,
+            fee,
+            amountIn,
+            0
+          );
 
-        if (amountOut.gt(0)) {
-          const stableContract = new ethers.Contract(stable, ERC20_ABI, provider);
-          const stableDecimals = await stableContract.decimals();
-          let price = parseFloat(ethers.utils.formatUnits(amountOut, stableDecimals));
-          
-          if (stable.toLowerCase() === config.wethAddr.toLowerCase()) {
-            const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
-            if (wethPrice) price *= wethPrice;
+          if (amountOut.gt(0)) {
+            const stableContract = new ethers.Contract(stable, ERC20_ABI, provider);
+            const stableDecimals = await stableContract.decimals();
+            let price = parseFloat(ethers.utils.formatUnits(amountOut, stableDecimals));
+            
+            if (stable.toLowerCase() === config.wethAddr.toLowerCase()) {
+              const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
+              if (wethPrice) price *= wethPrice;
+            }
+            return price;
           }
-          return price;
+        } catch (e) {
+          continue;
         }
-      } catch (e) {
-        continue;
       }
     }
+  } catch (e) {
+    console.error(`[OnChainFetcher] V3 decimals error for ${tokenAddr}:`, e);
   }
   return null;
 }
@@ -165,7 +194,7 @@ async function fetchTokenPriceFromDex(
     const config = CHAIN_CONFIG[chainId];
     if (!config) return null;
 
-    const provider = new ethers.providers.JsonRpcProvider(config.rpc);
+    const provider = await getProvider(chainId);
     const tokenAddress = ethers.utils.getAddress(tokenAddr);
 
     // Try Uniswap V3 first as it often has better liquidity for major tokens
@@ -246,7 +275,7 @@ async function fetchMarketCap(
     const config = CHAIN_CONFIG[chainId];
     if (!config || price <= 0) return 0;
 
-    const provider = new ethers.providers.JsonRpcProvider(config.rpc);
+    const provider = await getProvider(chainId);
     const contract = new ethers.Contract(tokenAddr, ERC20_ABI, provider);
 
     const totalSupply = await contract.totalSupply();

@@ -31,9 +31,9 @@ interface OnChainPrice {
 }
 
 const onChainCache = new Map<string, OnChainPrice>();
-const CACHE_TTL = 20000; // 20 seconds
-const PRICE_REFRESH_INTERVAL = 25000; // 25 seconds for unconditional server refresh
-const SUBSCRIPTION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 30000; // 30 seconds
+const PRICE_REFRESH_INTERVAL = 15000; // 15 seconds for unconditional server refresh
+const SUBSCRIPTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
 const activeSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number, ttlTimer?: NodeJS.Timeout }>();
 const priceFetchingLocks = new Map<string, Promise<any>>();

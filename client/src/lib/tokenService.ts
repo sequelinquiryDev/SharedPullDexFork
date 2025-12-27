@@ -153,19 +153,28 @@ export function getPlaceholderImage(): string {
   return DARK_SVG_PLACEHOLDER;
 }
 
+const priceCache = new Map<string, { price: number; timestamp: number }>();
+const PRICE_CACHE_TTL = 15000; // 15 seconds
+
 export async function getTokenPriceUSD(address: string, decimals = 18, chainId?: number): Promise<number | null> {
-  // IMPORTANT: decimals parameter should be passed from token.decimals
-  // Log a warning if not provided (falling back to default 18)
-  if (decimals === 18) {
-    console.debug(`[TokenService] getTokenPriceUSD called for ${address} - using decimals=${decimals}. Ensure this matches the actual token decimals.`);
-  }
   const addr = low(address);
   const cid = (chainId === 1 || chainId === 137) ? chainId : config.chainId;
+  const cacheKey = `${cid}-${addr}`;
+
+  // Check client-side cache
+  const cached = priceCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < PRICE_CACHE_TTL) {
+    return cached.price;
+  }
+
   try {
     const res = await fetch(`/api/prices/onchain?address=${addr}&chainId=${cid}`);
     if (res.ok) {
       const data = await res.json();
-      return data?.price ?? null;
+      if (data?.price) {
+        priceCache.set(cacheKey, { price: data.price, timestamp: Date.now() });
+        return data.price;
+      }
     }
   } catch (e) { console.error('Price fetch error:', e); }
   return null;
