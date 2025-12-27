@@ -120,16 +120,11 @@ export async function loadTokensAndMarkets(): Promise<void> {
 
 export function getTokenList(chainId?: number): Token[] {
   const cid = chainId ?? config.chainId;
-  const list = tokenListByChain.get(cid) || [];
-  if (list.length === 0) {
-    // If list is empty, return a very basic static list to avoid undefined issues
-    const staticDefaults: Record<number, Token[]> = {
-      1: [{ address: "0x0000000000000000000000000000000000000000", symbol: "ETH", name: "Ethereum", decimals: 18, logoURI: "" }],
-      137: [{ address: "0x0000000000000000000000000000000000001010", symbol: "MATIC", name: "Polygon", decimals: 18, logoURI: "" }]
-    };
-    return staticDefaults[cid] || [];
-  }
-  return list;
+  return tokenListByChain.get(cid) || [];
+}
+
+export function clearPriceCache() {
+  // Logic to clear price cache if needed, or just a stub if handled by server
 }
 
 export function getTokenMap(chainId?: number): Map<string, Token> {
