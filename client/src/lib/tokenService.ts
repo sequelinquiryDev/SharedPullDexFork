@@ -210,42 +210,14 @@ export async function getTokenByAddress(address: string, chainId?: number): Prom
   return null;
 }
 
-export async function fetchTokenIcon(token: Token, chainId?: number): Promise<string> {
-  const cid = chainId ?? config.chainId;
-  const addr = low(token.address);
-  const cacheKey = `${cid}-${addr}`;
-  
-  const cached = iconCache.get(cacheKey);
-  if (cached && Date.now() < cached.expires) {
-    return cached.url;
-  }
-  
-  if (iconFetchingInFlight.has(cacheKey)) {
-    return iconFetchingInFlight.get(cacheKey)!;
-  }
-  
-  const promise = (async () => {
-    try {
-      const res = await fetch(`/api/icon?address=${addr}&chainId=${cid}`);
-      if (res.ok) {
-        const data = await res.json();
-        const url = data.url || token.logoURI || getPlaceholderImage();
-        iconCache.set(cacheKey, { url, expires: Date.now() + 24 * 60 * 60 * 1000 });
-        iconFetchingInFlight.delete(cacheKey);
-        return url;
-      }
-    } catch (e) {}
-    iconFetchingInFlight.delete(cacheKey);
-    return token.logoURI || getPlaceholderImage();
-  })();
-  
-  iconFetchingInFlight.set(cacheKey, promise);
-  return promise;
-}
-
 export function getTokenLogoUrl(token: Token, chainId?: number): string {
+  if (!token || !token.address) return getPlaceholderImage();
   const cid = chainId ?? config.chainId;
   return `/api/icon?address=${low(token.address)}&chainId=${cid}`;
+}
+
+export async function fetchTokenIcon(token: Token, chainId?: number): Promise<string> {
+  return getTokenLogoUrl(token, chainId);
 }
 
 export interface OnChainAnalytics {

@@ -240,9 +240,9 @@ export function TokenInput({
   // Fetch icon for selected token using cached /api/icon endpoint
   useEffect(() => {
     if (selectedToken) {
-      setSelectedTokenIcon(getTokenLogoUrl(selectedToken, chainId));
+      setSelectedTokenIcon(getTokenLogoUrl(selectedToken, (selectedToken as ExtendedToken).chainId || chainId));
     }
-  }, [selectedToken?.address, chainId]);
+  }, [selectedToken?.address, chainId, chain]);
 
   // Fetch icons for all suggestions
   useEffect(() => {
@@ -256,7 +256,7 @@ export function TokenInput({
         setSuggestionIcons((prev) => new Map(prev).set(cacheKey, getTokenLogoUrl(token, tokenChainId)));
       }
     });
-  }, [suggestions.length, chainId]);
+  }, [suggestions.length, chainId, chain]);
 
   // Subscribe to prices for all suggestions and keep them streaming
   useEffect(() => {
@@ -504,7 +504,7 @@ export function TokenInput({
                 >
                   <div className="suggestion-left">
                     <img 
-                      src={getTokenLogoUrl(token, tokenChainId)} 
+                      src={suggestionIcons.get(`${tokenChainId || chainId}-${token.address}`) || getPlaceholderImage()} 
                       alt={token.symbol}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = getPlaceholderImage();
