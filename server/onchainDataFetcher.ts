@@ -22,7 +22,9 @@ const CHAIN_CONFIG: Record<
     rpc: [
       process.env.VITE_ETH_RPC_URL || "https://eth.llamarpc.com",
       "https://rpc.ankr.com/eth",
-      "https://cloudflare-eth.com"
+      "https://cloudflare-eth.com",
+      "https://eth-mainnet.public.blastapi.io",
+      "https://1rpc.io/eth"
     ],
     usdcAddr: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     usdtAddr: "0xdac17f958d2ee523a2206206994597c13d831ec7",
@@ -40,7 +42,9 @@ const CHAIN_CONFIG: Record<
     rpc: [
       process.env.VITE_POL_RPC_URL || "https://polygon-rpc.com",
       "https://rpc.ankr.com/polygon",
-      "https://polygon-bor-rpc.publicnode.com"
+      "https://polygon-bor-rpc.publicnode.com",
+      "https://polygon.llamarpc.com",
+      "https://1rpc.io/poly"
     ],
     usdcAddr: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
     usdtAddr: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
@@ -211,48 +215,52 @@ async function fetchTokenPriceFromDex(
     ].map(addr => ethers.utils.getAddress(addr));
 
     for (const factoryAddr of config.factories) {
-      const factory = new ethers.Contract(factoryAddr, FACTORY_ABI, provider);
-      
-      for (const targetStable of STABLECOINS) {
-        if (tokenAddress.toLowerCase() === targetStable.toLowerCase()) continue;
+      try {
+        const factory = new ethers.Contract(factoryAddr, FACTORY_ABI, provider);
+        
+        for (const targetStable of STABLECOINS) {
+          if (tokenAddress.toLowerCase() === targetStable.toLowerCase()) continue;
 
-        try {
-          const pairAddr = await factory.getPair(tokenAddress, targetStable);
+          try {
+            const pairAddr = await factory.getPair(tokenAddress, targetStable);
 
-          if (pairAddr !== ethers.constants.AddressZero) {
-            const pair = new ethers.Contract(pairAddr, PAIR_ABI, provider);
-            const [reserve0, reserve1] = await pair.getReserves();
-            
-            if (reserve0.isZero() || reserve1.isZero()) continue;
+            if (pairAddr !== ethers.constants.AddressZero) {
+              const pair = new ethers.Contract(pairAddr, PAIR_ABI, provider);
+              const [reserve0, reserve1] = await pair.getReserves();
+              
+              if (reserve0.isZero() || reserve1.isZero()) continue;
 
-            const token0 = await pair.token0();
-            const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
-            const tokenReserve = isToken0 ? reserve0 : reserve1;
-            const stableReserve = isToken0 ? reserve1 : reserve0;
+              const token0 = await pair.token0();
+              const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
+              const tokenReserve = isToken0 ? reserve0 : reserve1;
+              const stableReserve = isToken0 ? reserve1 : reserve0;
 
-            const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
-            const stableContract = new ethers.Contract(targetStable, ERC20_ABI, provider);
-            
-            const [tokenDecimals, stableDecimals] = await Promise.all([
-              tokenContract.decimals(),
-              stableContract.decimals()
-            ]);
+              const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+              const stableContract = new ethers.Contract(targetStable, ERC20_ABI, provider);
+              
+              const [tokenDecimals, stableDecimals] = await Promise.all([
+                tokenContract.decimals().catch(() => 18),
+                stableContract.decimals().catch(() => 18)
+              ]);
 
-            let priceInStable =
-              parseFloat(ethers.utils.formatUnits(stableReserve, stableDecimals)) /
-              parseFloat(ethers.utils.formatUnits(tokenReserve, tokenDecimals));
+              let priceInStable =
+                parseFloat(ethers.utils.formatUnits(stableReserve, stableDecimals)) /
+                parseFloat(ethers.utils.formatUnits(tokenReserve, tokenDecimals));
 
-            // If we paired with WETH, we need to convert WETH price to USDC
-            if (targetStable.toLowerCase() === config.wethAddr.toLowerCase()) {
-              const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
-              if (wethPrice) priceInStable *= wethPrice;
+              // If we paired with WETH, we need to convert WETH price to USDC
+              if (targetStable.toLowerCase() === config.wethAddr.toLowerCase()) {
+                const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
+                if (wethPrice) priceInStable *= wethPrice;
+              }
+
+              if (priceInStable > 0) return priceInStable;
             }
-
-            return Math.max(0, priceInStable);
+          } catch (e) {
+            continue;
           }
-        } catch (e) {
-          continue;
         }
+      } catch (e) {
+        continue;
       }
     }
 
