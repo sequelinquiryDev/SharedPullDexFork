@@ -269,44 +269,56 @@ export function TokenInput({
     }
   }, [suggestions, chainId, chain]);
 
-  // Subscribe to prices for all suggestions and keep them streaming
+  // Watcher for dropdown tokens visibility and selection
   useEffect(() => {
-    if (!showSuggestions || suggestions.length === 0) return;
+    if (!showSuggestions || suggestions.length === 0) {
+      // Only unsubscribe tokens that are NOT currently selected
+      unsubscribersRef.current.forEach((unsub, key) => {
+        if (selectedToken) {
+          const selectedKey = `${selectedToken.chainId || chainId}-${selectedToken.address.toLowerCase()}`;
+          if (key === selectedKey) return;
+        }
+        unsub();
+        unsubscribersRef.current.delete(key);
+      });
+      return;
+    }
 
     connectPriceService();
-    unsubscribersRef.current.forEach((unsub) => unsub());
-    unsubscribersRef.current.clear();
+    
+    const currentTokenKeys = new Set(suggestions.map(({ token }) => {
+      const tokenChainId = (token as ExtendedToken).chainId || chainId;
+      return `${tokenChainId}-${token.address.toLowerCase()}`;
+    }));
+    if (selectedToken) {
+      currentTokenKeys.add(`${selectedToken.chainId || chainId}-${selectedToken.address.toLowerCase()}`);
+    }
 
-    suggestions.forEach(({ token }) => {
-      const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
-      const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
-      
-      const unsubscribe = subscribeToPrice(token.address, tokenChainId, (priceData: OnChainPrice) => {
-        setSuggestions((prev) =>
-          prev.map((item) => {
-            if (
-              item.token.address.toLowerCase() === token.address.toLowerCase() &&
-              (item.token as ExtendedToken).chainId === tokenChainId
-            ) {
-              return {
-                ...item,
-                token: { ...item.token, currentPrice: priceData.price },
-                price: priceData.price,
-              };
-            }
-            return item;
-          })
-        );
-      });
-      
-      unsubscribersRef.current.set(subKey, unsubscribe);
+    // Cleanup unsubscribers for tokens no longer in view or selected
+    unsubscribersRef.current.forEach((unsub, key) => {
+      if (!currentTokenKeys.has(key)) {
+        unsub();
+        unsubscribersRef.current.delete(key);
+      }
     });
 
-    return () => {
-      unsubscribersRef.current.forEach((unsub) => unsub());
-      unsubscribersRef.current.clear();
-    };
-  }, [showSuggestions, suggestions.length, chain, chainId]);
+    suggestions.forEach(({ token }) => {
+      const tokenChainId = (token as ExtendedToken).chainId || chainId;
+      const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
+      
+      if (!unsubscribersRef.current.has(subKey)) {
+        const unsubscribe = subscribeToPrice(token.address, tokenChainId, (priceData) => {
+          setSuggestions(prev => prev.map(item => {
+            if (item.token.address.toLowerCase() === token.address.toLowerCase()) {
+              return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
+            }
+            return item;
+          }));
+        });
+        unsubscribersRef.current.set(subKey, unsubscribe);
+      }
+    });
+  }, [showSuggestions, suggestions, selectedToken, chainId]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {

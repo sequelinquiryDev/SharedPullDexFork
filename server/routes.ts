@@ -35,7 +35,7 @@ const CACHE_TTL = 20000; // 20 seconds
 const PRICE_REFRESH_INTERVAL = 25000; // 25 seconds for unconditional server refresh
 const SUBSCRIPTION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
 
-const activeSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number }>();
+const activeSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number, ttlTimer?: NodeJS.Timeout }>();
 const priceFetchingLocks = new Map<string, Promise<any>>();
 
 const iconCache = new Map<string, { url: string; expires: number }>();
@@ -51,7 +51,7 @@ interface CachedAnalytics {
 const analyticsCache = new Map<string, CachedAnalytics>();
 const ANALYTICS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 const watchedTokens = new Set<string>();
-const analyticsSubscriptions = new Map<string, Set<WebSocket>>();
+const analyticsSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number, ttlTimer?: NodeJS.Timeout }>();
 const analyticsFetchingLocks = new Map<string, Promise<any>>();
 
 const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: string; wethAddr: string; factories: string[]; scanApi: string; scanKey: string }> = {
@@ -342,8 +342,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (data.type === 'subscribe') {
           const key = `${data.chainId}-${data.address.toLowerCase()}`;
           
-          // ACCUMULATION MODEL: Never unsubscribe during session, only on disconnect
-          // Add to price subscriptions (only if not already in session)
+          // Clear any existing TTL timer when client subscribes/re-subscribes
+          const sub = activeSubscriptions.get(key);
+          if (sub?.ttlTimer) {
+            clearTimeout(sub.ttlTimer);
+            sub.ttlTimer = undefined;
+            console.log(`[WS] TTL cleared for ${key} due to re-subscription`);
+          }
+
           if (!sessionSubscriptions.has(key)) {
             sessionSubscriptions.add(key);
             subscribeToken(data.chainId, data.address);
@@ -352,33 +358,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               activeSubscriptions.set(key, { clients: new Set(), lastSeen: Date.now() });
             }
             activeSubscriptions.get(key)!.clients.add(ws);
-            console.log(`[WS] Client subscribed to ${key} (session count: ${sessionSubscriptions.size})`);
           }
           
           activeSubscriptions.get(key)!.lastSeen = Date.now();
           
-          // Add to analytics subscriptions (only if not already in session)
           const analyticsKey = `analytics-${key}`;
+          const aSub = analyticsSubscriptions.get(analyticsKey);
+          if (aSub?.ttlTimer) {
+            clearTimeout(aSub.ttlTimer);
+            aSub.ttlTimer = undefined;
+          }
+
           if (!sessionAnalyticsSubscriptions.has(analyticsKey)) {
             sessionAnalyticsSubscriptions.add(analyticsKey);
             if (!analyticsSubscriptions.has(analyticsKey)) {
-              analyticsSubscriptions.set(analyticsKey, new Set());
+              analyticsSubscriptions.set(analyticsKey, { clients: new Set(), lastSeen: Date.now() });
             }
-            analyticsSubscriptions.get(analyticsKey)!.add(ws);
-            console.log(`[WS] Client subscribed to analytics for ${key} (session analytics count: ${sessionAnalyticsSubscriptions.size})`);
+            analyticsSubscriptions.get(analyticsKey)!.clients.add(ws);
           }
           
-          // Send initial price data to client
-          const price = await fetchPriceAggregated(data.address, data.chainId);
-          if (price && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'price', data: price, address: data.address, chainId: data.chainId }));
-          }
+          analyticsSubscriptions.get(analyticsKey)!.lastSeen = Date.now();
           
-          // Send initial analytics data to client
-          // Background cache will update this token's analytics
-          const analytics = await getOnChainAnalytics(data.address, data.chainId);
-          if (analytics && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'analytics', data: analytics, address: data.address, chainId: data.chainId }));
+          // Send initial data...
+        } else if (data.type === 'unsubscribe') {
+          const key = `${data.chainId}-${data.address.toLowerCase()}`;
+          const analyticsKey = `analytics-${key}`;
+          
+          // Start 1-minute TTL when client explicitly unsubscribes (e.g. dropdown closed or token unselected)
+          const sub = activeSubscriptions.get(key);
+          if (sub && sub.clients.has(ws)) {
+            if (sub.ttlTimer) clearTimeout(sub.ttlTimer);
+            sub.ttlTimer = setTimeout(() => {
+              if (activeSubscriptions.get(key) === sub) {
+                activeSubscriptions.delete(key);
+                const [cid, addr] = key.split('-');
+                unsubscribeToken(Number(cid), addr);
+                console.log(`[WS] TTL expired: Unsubscribed from ${key}`);
+              }
+            }, 60000); // 1 minute TTL
+          }
+
+          const aSub = analyticsSubscriptions.get(analyticsKey);
+          if (aSub && aSub.clients.has(ws)) {
+            if (aSub.ttlTimer) clearTimeout(aSub.ttlTimer);
+            aSub.ttlTimer = setTimeout(() => {
+              if (analyticsSubscriptions.get(analyticsKey) === aSub) {
+                analyticsSubscriptions.delete(analyticsKey);
+              }
+            }, 60000);
           }
         }
       } catch (e) {

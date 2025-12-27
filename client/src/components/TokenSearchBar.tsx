@@ -197,76 +197,67 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
     };
   }, [showSuggestions]);
 
+  // Watcher for dropdown tokens visibility and selection
   useEffect(() => {
-    if (!showSuggestions || suggestions.length === 0) return;
+    if (!showSuggestions || suggestions.length === 0) {
+      // Unsubscribe all when dropdown closes
+      unsubscribersRef.current.forEach(unsub => unsub());
+      unsubscribersRef.current.clear();
+      return;
+    }
 
-    // Connect to WebSocket and subscribe to prices
     connectPriceService();
     
-    // Subscribe to prices for all suggestions
-    unsubscribersRef.current.forEach(unsub => unsub());
-    unsubscribersRef.current.clear();
+    // Set of current tokens in suggestions to keep track of changes
+    const currentTokenKeys = new Set(suggestions.map(({ token }) => {
+      const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
+      return `${tokenChainId}-${token.address.toLowerCase()}`;
+    }));
 
-    // Fetch server cached prices immediately for all suggestions
+    // Cleanup unsubscribers for tokens no longer in suggestions
+    unsubscribersRef.current.forEach((unsub, key) => {
+      if (!currentTokenKeys.has(key)) {
+        unsub();
+        unsubscribersRef.current.delete(key);
+      }
+    });
+
+    // Subscribe to all tokens currently in suggestions
     suggestions.forEach(({ token }) => {
       const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
       const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
       
-      // Fetch cached price immediately and display it
-      fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`)
-        .then(res => res.json())
-        .then((priceData: OnChainPrice | null) => {
-          if (!priceData || priceData.price === undefined || priceData.price === null) return;
-          setSuggestions((prev) =>
-            prev.map((item) => {
-              if (!item || !item.token) return item;
-              if (item.token.address.toLowerCase() === token.address.toLowerCase() && 
-                  (item.token as ExtendedToken).chainId === tokenChainId) {
-                return {
-                  ...item,
-                  token: {
-                    ...item.token,
-                    currentPrice: priceData.price,
-                  },
-                  price: priceData.price,
-                };
+      if (!unsubscribersRef.current.has(subKey)) {
+        // Fetch cached price immediately
+        fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`)
+          .then(res => res.json())
+          .then((priceData: OnChainPrice | null) => {
+            if (!priceData || priceData.price === undefined) return;
+            setSuggestions(prev => prev.map(item => {
+              if (item.token.address.toLowerCase() === token.address.toLowerCase()) {
+                return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
               }
               return item;
-            })
-          );
-        })
-        .catch(() => {});
+            }));
+          }).catch(() => {});
 
-      // Subscribe to live price updates via WebSocket
-      const unsubscribe = subscribeToPrice(token.address, tokenChainId, (priceData: OnChainPrice | null) => {
-        if (!priceData || priceData.price === undefined || priceData.price === null) return;
-        setSuggestions((prev) =>
-          prev.map((item) => {
-            if (!item || !item.token) return item;
-            if (item.token.address.toLowerCase() === token.address.toLowerCase() && 
-                (item.token as ExtendedToken).chainId === tokenChainId) {
-              return {
-                ...item,
-                token: {
-                  ...item.token,
-                  currentPrice: priceData.price,
-                },
-                price: priceData.price,
-              };
+        const unsubscribe = subscribeToPrice(token.address, tokenChainId, (priceData) => {
+          if (!priceData || priceData.price === undefined) return;
+          setSuggestions(prev => prev.map(item => {
+            if (item.token.address.toLowerCase() === token.address.toLowerCase()) {
+              return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
             }
             return item;
-          })
-        );
-      });
-      
-      unsubscribersRef.current.set(subKey, unsubscribe);
+          }));
+        });
+        unsubscribersRef.current.set(subKey, unsubscribe);
+      }
     });
 
     return () => {
-      unsubscribersRef.current.forEach(unsub => unsub());
-      unsubscribersRef.current.clear();
+      // Don't clear all on every dependency change, only on unmount or close handled above
     };
-  }, [showSuggestions, suggestions.length, chain]);
+  }, [showSuggestions, suggestions, chain]);
 
   useEffect(() => {
     return () => {

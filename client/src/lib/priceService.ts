@@ -79,7 +79,10 @@ export function subscribeToPrice(
   
   // Return unsubscribe function
   return () => {
-    activeSubscriptions.delete(subKey);
+    // Only delete from activeSubscriptions if this specific callback is the one registered
+    if (activeSubscriptions.get(subKey) === callback) {
+      activeSubscriptions.delete(subKey);
+    }
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'unsubscribe', address, chainId }));
     }
