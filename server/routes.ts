@@ -48,7 +48,10 @@ const ANALYTICS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 const watchedTokens = new Set<string>();
 const analyticsSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number, ttlTimer?: NodeJS.Timeout }>();
 const analyticsFetchingLocks = new Map<string, Promise<any>>();
-const iconCache = new Map<string, string>();
+const iconCache = new Map<string, { url: string; expires: number }>();
+const ICON_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const iconFetchingInFlight = new Map<string, Promise<string | null>>();
+const iconRefreshTimers = new Map<string, NodeJS.Timeout>();
 
 const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: string; wethAddr: string; factories: string[]; scanApi: string; scanKey: string }> = {
   1: {
@@ -483,7 +486,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     ws.on('close', () => {
       // ONLY unsubscribe when session ends (WebSocket closes)
       // This happens for ALL accumulated subscriptions in one go
-      for (const key of sessionSubscriptions) {
+      for (const key of Array.from(sessionSubscriptions)) {
         const sub = activeSubscriptions.get(key);
         if (sub) {
           sub.clients.delete(ws);
@@ -504,7 +507,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       
       // Remove all analytics subscriptions for this client
-      for (const analyticsKey of sessionAnalyticsSubscriptions) {
+      for (const analyticsKey of Array.from(sessionAnalyticsSubscriptions)) {
         const aSub = analyticsSubscriptions.get(analyticsKey);
         if (aSub && aSub.clients) {
           aSub.clients.delete(ws);
@@ -561,7 +564,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     
     try {
       const url = `${config.scanApi}?module=account&action=tokenlist&address=${address}&apikey=${config.scanKey}`;
-      const response = await fetch(url, { timeout: 5000 });
+      const response = await fetch(url);
       if (!response.ok) return null;
       
       const data = await response.json();
@@ -824,9 +827,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.redirect(cached.url);
     }
     
+    const placeholder = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxNCIgY3k9IjE0IiByPSIxNCIgZmlsbD0iIzJBMkEzQSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjODg4IiBmb250LXNpemU9IjEyIj4/PC90ZXh0Pjwvc3ZnPg==';
+
     if (iconFetchingInFlight.has(cacheKey)) {
-      const url = await iconFetchingInFlight.get(cacheKey)!;
-      return res.redirect(url);
+      const url = await iconFetchingInFlight.get(cacheKey);
+      return res.redirect(url || placeholder);
     }
     
     const promise = fetchIconUrl(addr, cid);
@@ -834,7 +839,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const url = await promise;
     iconFetchingInFlight.delete(cacheKey);
     
-    res.redirect(url);
+    res.redirect(url || placeholder);
   });
 
   // Monitoring endpoint for scalability verification
@@ -872,8 +877,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({
       tokenKey: key,
       priceSubscribers: subs?.clients.size || 0,
-      analyticsSubscribers: analyticsSubs?.size || 0,
-      hasActiveSubscribers: (subs?.clients.size || 0) > 0 || (analyticsSubs?.size || 0) > 0,
+      analyticsSubscribers: analyticsSubs?.clients.size || 0,
+      hasActiveSubscribers: (subs?.clients.size || 0) > 0 || (analyticsSubs?.clients.size || 0) > 0,
       cachedPrice: onChainCache.get(key) ? 'YES' : 'NO',
       cachedAnalytics: analyticsCache.get(`analytics-${key}`) ? 'YES' : 'NO',
     });
