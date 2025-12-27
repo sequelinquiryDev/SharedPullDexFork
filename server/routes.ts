@@ -31,8 +31,8 @@ interface OnChainPrice {
 }
 
 const onChainCache = new Map<string, OnChainPrice>();
-const CACHE_TTL = 30000; // 30 seconds
-const PRICE_REFRESH_INTERVAL = 15000; // 15 seconds for unconditional server refresh
+const CACHE_TTL = 180000; // 3 minutes server-side TTL
+const PRICE_REFRESH_INTERVAL = 60000; // 1 minute for unconditional server refresh
 const SUBSCRIPTION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
 
 const activeSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number, ttlTimer?: NodeJS.Timeout }>();
@@ -92,7 +92,20 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
     };
     
     const cacheKey = `${chainId}-${address.toLowerCase()}`;
+    
+    // Smart caching: delete old data if new data arrived to prevent contamination
+    onChainCache.delete(cacheKey);
     onChainCache.set(cacheKey, result);
+
+    // Immediate singleflight to connected subscribers on new data arrival
+    const sub = activeSubscriptions.get(cacheKey);
+    if (sub && sub.clients.size > 0) {
+      const msg = JSON.stringify({ type: 'price', data: result, address, chainId });
+      sub.clients.forEach(ws => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(msg);
+      });
+    }
+
     return result;
   } catch (e) {
     console.error("[OnChainPrice] Error:", e);
@@ -267,33 +280,26 @@ async function refreshAllAnalytics() {
   console.log('[Analytics] Refresh complete');
 }
 
-// Start unconditional price refresh every 25 seconds for ALL dynamic tokens
+// Start unconditional price refresh every 1 minute for ALL dynamic tokens
 function startUnconditionalPriceRefresh() {
   // Initial load - load all tokens once at startup
   reloadAllTokensForWatching();
   
-  // Unconditionally refresh prices every 25 seconds (no reload, just refresh cache)
+  // Unconditionally refresh prices every 1 minute
   setInterval(async () => {
+    // Get all tokens from our existed dynamic tokens system
     const activeTokens = getActiveTokens();
-    console.log(`[PriceCache] Refreshing ${activeTokens.length} tokens (server-side caching only)...`);
+    console.log(`[PriceCache] Unconditionally refreshing ${activeTokens.length} tokens (1m cycle)...`);
     
     for (const tokenKey of activeTokens) {
       const [chainIdStr, address] = tokenKey.split('-');
       const chainId = Number(chainIdStr);
       
-      // Use priceFetchingLocks to avoid duplicate work if a subscription request just came in
-      const pricePromise = fetchPriceAggregated(address, chainId);
-      const price = await pricePromise;
+      // Force on-chain fetch by bypassing cache for the 1-minute global refresh
+      // This ensures we have fresh data to potentially broadcast
+      const price = await getOnChainPrice(address, chainId);
       
-      // Imeadietly check for the SUBSCRIBED users to refresh their price in the frontend
-      // The singleflight "price" refresh subscribers should only be for subscribers that the 1 min ttl not active
-      const sub = activeSubscriptions.get(tokenKey);
-      if (sub && !sub.ttlTimer && sub.clients.size > 0 && price) {
-        const msg = JSON.stringify({ type: 'price', data: price, address, chainId });
-        sub.clients.forEach(ws => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(msg);
-        });
-      }
+      // broadcast is handled inside getOnChainPrice via the smart caching logic
     }
     
     console.log('[PriceCache] Refresh complete');
@@ -386,6 +392,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           }
           
           activeSubscriptions.get(key)!.lastSeen = Date.now();
+
+          // Immediately send server cached price to new subscriber
+          const cachedPrice = onChainCache.get(key);
+          if (cachedPrice && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'price', data: cachedPrice, address: data.address, chainId: data.chainId }));
+          } else if (!cachedPrice) {
+            // If server doesn't have caching, initiate direct fetch and broadcast
+            fetchPriceAggregated(data.address, data.chainId);
+          }
           
           const analyticsKey = `analytics-${key}`;
           const aSub = analyticsSubscriptions.get(analyticsKey);
