@@ -169,7 +169,7 @@ async function fetchTokenPriceFromV3(
                    (chainId === 1 && (tokenAddr.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" || tokenAddr.toLowerCase() === "0x0000000000000000000000000000000000000000"));
 
   try {
-    const decimals = isNative ? 18 : await new ethers.Contract(tokenAddr, ERC20_ABI, provider).decimals();
+    const decimals = isNative ? 18 : await new ethers.Contract(tokenAddr, ERC20_ABI, provider).decimals().catch(() => 18);
     const amountIn = ethers.utils.parseUnits("1", decimals);
 
     for (const stable of STABLES) {
@@ -208,7 +208,9 @@ async function fetchTokenPriceFromV3(
               
               if (stable.toLowerCase() === config.wethAddr.toLowerCase()) {
                 // Fixed: Check tokenAddr to avoid recursive WETH price lookup when pricing WETH itself
-                if (tokenAddr.toLowerCase() !== config.wethAddr.toLowerCase()) {
+                if (tokenAddr.toLowerCase() !== config.wethAddr.toLowerCase() && 
+                    tokenAddr.toLowerCase() !== "0x0000000000000000000000000000000000001010" && 
+                    tokenAddr.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
                   const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
                   if (wethPrice) price *= wethPrice;
                 }
