@@ -33,10 +33,14 @@ function getMillisecondsUntilNextHour(): number {
  */
 export function scheduleNewTokenRefresh(chainId: number, address: string): void {
   const tokenKey = `${chainId}-${address.toLowerCase()}`;
-  newTokensToRefresh.add(tokenKey);
   
-  // Refresh immediately
-  refreshNewTokens();
+  // Only add if it's actually an active token (not just detected in list)
+  const activeTokens = getActiveTokens();
+  if (activeTokens.includes(tokenKey)) {
+    newTokensToRefresh.add(tokenKey);
+    // Refresh immediately
+    refreshNewTokens();
+  }
 }
 
 /**

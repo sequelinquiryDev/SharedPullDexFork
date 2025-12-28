@@ -295,36 +295,40 @@ async function refreshAllAnalytics() {
   console.log('[Analytics] Refresh complete');
 }
 
-// Start unconditional price refresh every 1 minute for ALL dynamic tokens
+// Start unconditional price refresh every 1 minute for ACTIVE tokens only
 function startUnconditionalPriceRefresh() {
-  // Initial load - load all tokens once at startup
+  // Initial load - sync watched tokens once at startup
   reloadAllTokensForWatching();
   
-  // Unconditionally refresh prices every 1 minute
+  // Refresh prices every 1 minute for tokens with ACTIVE subscribers
   setInterval(async () => {
-    // Reload watched tokens to ensure we have the latest from dynamic tokens list
+    // We still reload to keep the dynamic list available, but we only refresh what's active
     reloadAllTokensForWatching();
     
-    const dynamicTokens = Array.from(watchedTokens);
-    console.log(`[PriceCache] Unconditionally refreshing ${dynamicTokens.length} dynamic tokens (1m cycle)...`);
+    // Get currently active tokens from watchlist manager
+    const activeTokens = getActiveTokens();
     
-    // Use parallel processing with a small delay between batches to avoid RPC rate limits
+    if (activeTokens.length === 0) {
+      return;
+    }
+
+    console.log(`[PriceCache] Refreshing ${activeTokens.length} active tokens (1m cycle)...`);
+    
+    // Use parallel processing with a small delay between batches
     const BATCH_SIZE = 5;
-    for (let i = 0; i < dynamicTokens.length; i += BATCH_SIZE) {
-      const batch = dynamicTokens.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < activeTokens.length; i += BATCH_SIZE) {
+      const batch = activeTokens.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(async (tokenKey) => {
         const [chainIdStr, address] = tokenKey.split('-');
         const chainId = Number(chainIdStr);
         
-        // Dynamic tokens list refresh logic: bypass internal fetcher cache to hit on-chain
+        // Invalidate internal fetcher cache to hit on-chain for the periodic update
         const { invalidateCache } = await import("./onchainDataFetcher");
         invalidateCache(address, chainId); 
         
         await getOnChainPrice(address, chainId);
       }));
     }
-    
-    console.log('[PriceCache] Dynamic tokens refresh complete');
   }, PRICE_REFRESH_INTERVAL);
 }
 
@@ -414,7 +418,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             activeSubscriptions.get(key)!.clients.add(ws);
           }
           
-          activeSubscriptions.get(key)!.lastSeen = Date.now();
+          // CRITICAL: Update lastSeen to prevent cleanup while client is active
+          const activeSub = activeSubscriptions.get(key);
+          if (activeSub) {
+            activeSub.lastSeen = Date.now();
+          }
 
           // Client Imeadietly requests price from server cachings when SUBSCRIBED
           const cachedPrice = onChainCache.get(key);
