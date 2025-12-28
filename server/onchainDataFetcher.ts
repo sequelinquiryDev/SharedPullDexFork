@@ -234,6 +234,7 @@ async function fetchTokenPriceFromV3(
 
 /**
  * Fetch token price by finding pair reserves on DEX
+ * Uses intelligent pool caching to reduce RPC hits
  * Returns price in USDC terms
  */
 async function fetchTokenPriceFromDex(
@@ -241,6 +242,8 @@ async function fetchTokenPriceFromDex(
   chainId: number,
   isInternalWethCall: boolean = false
 ): Promise<number | null> {
+  const { getCachedPool, cachePool, getFactoryPriority, isPoolCacheHot } = await import("./poolCacheManager");
+  
   // Check if we are fetching price for WETH/MATIC itself to avoid infinite recursion
   const config = CHAIN_CONFIG[chainId];
   if (config && tokenAddr.toLowerCase() === config.wethAddr.toLowerCase() && isInternalWethCall) {
@@ -297,16 +300,35 @@ async function fetchTokenPriceFromDex(
       // Keep track of the best price found (highest liquidity/reserves)
       let bestPrice: number | null = null;
       let maxLiquidity = ethers.BigNumber.from(0);
+      let foundReliablePool = false;
 
-      for (const factoryAddr of config.factories) {
+      const { primary, fallback } = getFactoryPriority(chainId);
+      const factoriesToTry = [...primary, ...fallback];
+
+      for (const factoryIdx of factoriesToTry) {
+        const factoryAddr = config.factories[factoryIdx];
+        if (!factoryAddr) continue;
+
         try {
           const factory = new ethers.Contract(factoryAddr, FACTORY_ABI, provider);
           
           for (const targetStable of STABLECOINS) {
             if (tokenAddress.toLowerCase() === targetStable.toLowerCase()) continue;
 
+            // Check if we have a cached pool for this pair
+            const cachedPool = getCachedPool(tokenAddress, targetStable, chainId);
+            
             try {
-              const pairAddr = await factory.getPair(tokenAddress, targetStable);
+              let pairAddr: string;
+              
+              if (cachedPool) {
+                // Use cached pool if available and hot
+                pairAddr = cachedPool.poolAddress;
+                console.log(`[PoolCache] Using cached pool: ${pairAddr}`);
+              } else {
+                // Discover new pool
+                pairAddr = await factory.getPair(tokenAddress, targetStable);
+              }
 
               if (pairAddr !== ethers.constants.AddressZero) {
                 const pair = new ethers.Contract(pairAddr, PAIR_ABI, provider);
@@ -354,12 +376,25 @@ async function fetchTokenPriceFromDex(
                   if (currentLiquidity.gt(maxLiquidity)) {
                     maxLiquidity = currentLiquidity;
                     bestPrice = priceInStable;
+                    
+                    // Cache this pool if it's the best we found
+                    if (!cachedPool && factoryIdx < primary.length) {
+                      const dexName = factoryIdx === 0 ? (chainId === 1 ? 'Uniswap V2' : 'QuickSwap') : 'SushiSwap';
+                      cachePool(tokenAddress, targetStable, chainId, pairAddr, factoryIdx, dexName);
+                      foundReliablePool = true;
+                    }
                   }
                 }
               }
             } catch (e) {
               continue;
             }
+          }
+
+          // If we found a reliable pool from primary DEX, skip other factories
+          if (foundReliablePool && factoryIdx < primary.length) {
+            console.log(`[PoolCache] Found reliable pool from primary DEX, skipping remaining factories`);
+            break;
           }
         } catch (e) {
           continue;

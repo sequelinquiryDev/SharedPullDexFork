@@ -562,6 +562,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(price);
   });
 
+  // Batch price fetch endpoint - reduces RPC hits by fetching multiple tokens at once
+  app.post("/api/prices/batch", async (req, res) => {
+    const { tokens } = req.body;
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      return res.status(400).json({ error: "tokens array required" });
+    }
+
+    const results: Record<string, OnChainPrice | null> = {};
+    const promises = tokens.map(async (token: any) => {
+      const price = await fetchPriceAggregated(token.address, token.chainId);
+      const key = `${token.chainId}-${token.address.toLowerCase()}`;
+      results[key] = price;
+    });
+
+    await Promise.all(promises);
+    res.json(results);
+  });
+
   app.get("/api/onchain-analytics", async (req, res) => {
     const { address, chainId } = req.query;
     if (!address || !chainId) return res.status(400).json({ error: "Missing params" });
