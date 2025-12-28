@@ -24,7 +24,9 @@ const CHAIN_CONFIG: Record<
       "https://rpc.ankr.com/eth",
       "https://cloudflare-eth.com",
       "https://eth-mainnet.public.blastapi.io",
-      "https://1rpc.io/eth"
+      "https://1rpc.io/eth",
+      "https://eth.drpc.org",
+      "https://gateway.tenderly.co/public/mainnet"
     ],
     usdcAddr: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     usdtAddr: "0xdac17f958d2ee523a2206206994597c13d831ec7",
@@ -36,6 +38,8 @@ const CHAIN_CONFIG: Record<
       "0x01af51A2f11B10025D8F0429408544B9E4936A00", // Kyber V2
       "0xBA12222222228d8Ba445958a75a0704d566BF2C8", // Balancer V2 Vault
       "0x1f98431c8ad98523631ae4a59f267346ea31F984", // Uniswap V3 Factory
+      "0xef1c6e67703c7bd7107eed8303fbe6ec2554ee6b", // Uniswap Universal Router (V2/V3)
+      "0xA5E0829CaCEd8fFDDF9ecdf2f0072185A3D19Ac9", // Fraxswap
     ],
   },
   137: {
@@ -44,7 +48,8 @@ const CHAIN_CONFIG: Record<
       "https://rpc.ankr.com/polygon",
       "https://polygon-bor-rpc.publicnode.com",
       "https://polygon.llamarpc.com",
-      "https://1rpc.io/poly"
+      "https://1rpc.io/poly",
+      "https://polygon.drpc.org"
     ],
     usdcAddr: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
     usdtAddr: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
@@ -55,6 +60,9 @@ const CHAIN_CONFIG: Record<
       "0x9e5A52f57b30f751704e67BC790382379796230d", // ApeSwap
       "0x115934131916C8b277dd010Ee02de363c09d037c", // JetSwap
       "0xBA12222222228d8Ba445958a75a0704d566BF2C8", // Balancer V2 Vault
+      "0x4b7b2586616428768e916294711f56860d5e1ec9", // Retro
+      "0xdb4044169722883313d4b68420089e504c6d67f7", // Pearl
+      "0x1F98431c8aD98523631AE4a59f267346ea31F984", // Uniswap V3 Factory (Polygon)
     ],
   },
 };
@@ -222,107 +230,117 @@ async function fetchTokenPriceFromDex(
   chainId: number,
   isInternalWethCall: boolean = false
 ): Promise<number | null> {
-  try {
-    const config = CHAIN_CONFIG[chainId];
-    if (!config) return null;
+  let retries = 2;
+  while (retries > 0) {
+    try {
+      const config = CHAIN_CONFIG[chainId];
+      if (!config) return null;
 
-    const provider = await getProvider(chainId);
-    const tokenAddress = ethers.utils.getAddress(tokenAddr);
+      const provider = await getProvider(chainId);
+      const tokenAddress = ethers.utils.getAddress(tokenAddr);
 
-    // Try Uniswap V3 first as it often has better liquidity for major tokens
-    if (!isInternalWethCall) {
-      const v3Price = await fetchTokenPriceFromV3(tokenAddress, chainId, provider);
-      if (v3Price) return v3Price;
-    }
-
-    // Try all V2-style factories
-    const STABLECOINS = [
-      config.usdcAddr,
-      config.usdtAddr,
-      config.wethAddr,
-      "0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT Mainnet (fallback)
-      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC Mainnet (fallback)
-      "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // WETH Mainnet (fallback)
-    ].map(addr => {
-      try {
-        return ethers.utils.getAddress(addr);
-      } catch (e) {
-        return null;
+      // Try Uniswap V3 first as it often has better liquidity for major tokens
+      if (!isInternalWethCall) {
+        const v3Price = await fetchTokenPriceFromV3(tokenAddress, chainId, provider);
+        if (v3Price) return v3Price;
       }
-    }).filter((addr): addr is string => !!addr);
 
-    // Keep track of the best price found (highest liquidity/reserves)
-    let bestPrice: number | null = null;
-    let maxLiquidity = ethers.BigNumber.from(0);
+      // Try all V2-style factories
+      const STABLECOINS = [
+        config.usdcAddr,
+        config.usdtAddr,
+        config.wethAddr,
+        "0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT Mainnet (fallback)
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC Mainnet (fallback)
+        "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // WETH Mainnet (fallback)
+        "0x6b175474e89094c44da98b954eedeac495271d0f", // DAI Mainnet
+        "0x853d955acef822db058eb8505911ed77f175b99e", // FRAX Mainnet
+        "0x8f3Cf7ad23Cd3CaDbd9735AFf958023239c6A063", // DAI Polygon
+        "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", // USDC.e Polygon
+        "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", // USDC Polygon
+        "0xc2132d05d31c914a87c6611c10748aeb04b58e8f", // USDT Polygon
+        "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6", // WBTC Polygon
+        "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", // WETH Polygon
+      ].map(addr => {
+        try {
+          return ethers.utils.getAddress(addr);
+        } catch (e) {
+          return null;
+        }
+      }).filter((addr): addr is string => !!addr);
 
-    for (const factoryAddr of config.factories) {
-      try {
-        const factory = new ethers.Contract(factoryAddr, FACTORY_ABI, provider);
-        
-        for (const targetStable of STABLECOINS) {
-          if (tokenAddress.toLowerCase() === targetStable.toLowerCase()) continue;
+      // Keep track of the best price found (highest liquidity/reserves)
+      let bestPrice: number | null = null;
+      let maxLiquidity = ethers.BigNumber.from(0);
 
-          try {
-            const pairAddr = await factory.getPair(tokenAddress, targetStable);
+      for (const factoryAddr of config.factories) {
+        try {
+          const factory = new ethers.Contract(factoryAddr, FACTORY_ABI, provider);
+          
+          for (const targetStable of STABLECOINS) {
+            if (tokenAddress.toLowerCase() === targetStable.toLowerCase()) continue;
 
-            if (pairAddr !== ethers.constants.AddressZero) {
-              const pair = new ethers.Contract(pairAddr, PAIR_ABI, provider);
-              const [reserve0, reserve1] = await pair.getReserves();
-              
-              if (reserve0.isZero() || reserve1.isZero()) continue;
+            try {
+              const pairAddr = await factory.getPair(tokenAddress, targetStable);
 
-              const token0 = await pair.token0();
-              const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
-              const tokenReserve = isToken0 ? reserve0 : reserve1;
-              const stableReserve = isToken0 ? reserve1 : reserve0;
+              if (pairAddr !== ethers.constants.AddressZero) {
+                const pair = new ethers.Contract(pairAddr, PAIR_ABI, provider);
+                const [reserve0, reserve1] = await pair.getReserves();
+                
+                if (reserve0.isZero() || reserve1.isZero()) continue;
 
-              // Simple liquidity check: use the pair with the most tokens (normalized by decimals later if needed)
-              // For now, we just prefer non-zero reserves and prioritize the first successful one
-              // but we can improve this by comparing stableReserve values
-              
-              const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
-              const stableContract = new ethers.Contract(targetStable, ERC20_ABI, provider);
-              
-              const [tokenDecimals, stableDecimals] = await Promise.all([
-                tokenContract.decimals().catch(() => 18),
-                stableContract.decimals().catch(() => 18)
-              ]);
+                const token0 = await pair.token0();
+                const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
+                const tokenReserve = isToken0 ? reserve0 : reserve1;
+                const stableReserve = isToken0 ? reserve1 : reserve0;
 
-              const tokenUnits = parseFloat(ethers.utils.formatUnits(tokenReserve, tokenDecimals));
-              const stableUnits = parseFloat(ethers.utils.formatUnits(stableReserve, stableDecimals));
-              
-              if (tokenUnits === 0) continue;
-              
-              let priceInStable = stableUnits / tokenUnits;
+                const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+                const stableContract = new ethers.Contract(targetStable, ERC20_ABI, provider);
+                
+                const [tokenDecimals, stableDecimals] = await Promise.all([
+                  tokenContract.decimals().catch(() => 18),
+                  stableContract.decimals().catch(() => 18)
+                ]);
 
-              // If we paired with WETH, we need to convert WETH price to USDC
-              if (targetStable.toLowerCase() === config.wethAddr.toLowerCase()) {
-                const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
-                if (wethPrice) priceInStable *= wethPrice;
-              }
+                const tokenUnits = parseFloat(ethers.utils.formatUnits(tokenReserve, tokenDecimals));
+                const stableUnits = parseFloat(ethers.utils.formatUnits(stableReserve, stableDecimals));
+                
+                if (tokenUnits === 0) continue;
+                
+                let priceInStable = stableUnits / tokenUnits;
 
-              if (priceInStable > 0) {
-                // If this pair has significantly more "value" in reserves, use its price
-                const currentLiquidity = stableReserve; // Crude but effective for same-stable comparisons
-                if (currentLiquidity.gt(maxLiquidity)) {
-                  maxLiquidity = currentLiquidity;
-                  bestPrice = priceInStable;
+                // If we paired with WETH, we need to convert WETH price to USDC
+                if (targetStable.toLowerCase() === config.wethAddr.toLowerCase() || 
+                    targetStable.toLowerCase() === "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619".toLowerCase() ||
+                    targetStable.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".toLowerCase()) {
+                  const wethPrice = await fetchTokenPriceFromDex(targetStable, chainId, true);
+                  if (wethPrice) priceInStable *= wethPrice;
+                }
+
+                if (priceInStable > 0) {
+                  const currentLiquidity = stableReserve;
+                  if (currentLiquidity.gt(maxLiquidity)) {
+                    maxLiquidity = currentLiquidity;
+                    bestPrice = priceInStable;
+                  }
                 }
               }
+            } catch (e) {
+              continue;
             }
-          } catch (e) {
-            continue;
           }
+        } catch (e) {
+          continue;
         }
-      } catch (e) {
-        continue;
       }
+      if (bestPrice) return bestPrice;
+    } catch (e) {
+      console.error(`[OnChainFetcher] Price fetch error for ${tokenAddr} (Retries left: ${retries}):`, e);
     }
-    return bestPrice;
-  } catch (e) {
-    console.error(`[OnChainFetcher] Price fetch error for ${tokenAddr}:`, e);
-    return null;
+    retries--;
+    if (retries > 0) await new Promise(resolve => setTimeout(resolve, 1000));
   }
+  return null;
 }
 
 /**
