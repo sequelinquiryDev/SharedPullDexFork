@@ -78,7 +78,11 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
   const { fetchOnChainData } = await import("./onchainDataFetcher");
   
   try {
-    const data = await fetchOnChainData(address, chainId);
+    const { fetchOnChainData, getCachedOnChainData } = await import("./onchainDataFetcher");
+    
+    // Check for cached data first to serve late subscribers immediately
+    const cachedPrice = getCachedOnChainData(address, chainId);
+    const data = cachedPrice || await fetchOnChainData(address, chainId);
     if (!data) return null;
     
     const result: OnChainPrice = {
@@ -147,8 +151,11 @@ async function getOnChainAnalytics(address: string, chainId: number): Promise<On
 
   const promise = (async () => {
     try {
-      const { fetchOnChainData } = await import("./onchainDataFetcher");
-      const onchainData = await fetchOnChainData(address, chainId);
+      const { fetchOnChainData, getCachedOnChainData } = await import("./onchainDataFetcher");
+      
+      // Check for cached data first to serve late subscribers immediately
+      const cachedOnChain = getCachedOnChainData(address, chainId);
+      const onchainData = cachedOnChain || await fetchOnChainData(address, chainId);
       
       if (!onchainData) {
         console.warn(`[Analytics] Could not fetch on-chain data for ${address} on chain ${chainId}`);
