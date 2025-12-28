@@ -164,13 +164,19 @@ async function fetchTokenPriceFromV3(
   const config = CHAIN_CONFIG[chainId];
   const STABLES = [config.usdcAddr, config.usdtAddr, config.wethAddr];
   
+  // NATIVE token identification (POL/MATIC on Polygon or ETH on Ethereum)
+  const isNative = (chainId === 137 && (tokenAddr.toLowerCase() === "0x0000000000000000000000000000000000001010" || tokenAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")) ||
+                   (chainId === 1 && (tokenAddr.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" || tokenAddr.toLowerCase() === "0x0000000000000000000000000000000000000000"));
+
   try {
-    const tokenContract = new ethers.Contract(tokenAddr, ERC20_ABI, provider);
-    const decimals = await tokenContract.decimals();
+    const decimals = isNative ? 18 : await new ethers.Contract(tokenAddr, ERC20_ABI, provider).decimals();
     const amountIn = ethers.utils.parseUnits("1", decimals);
 
     for (const stable of STABLES) {
-      if (tokenAddr.toLowerCase() === stable.toLowerCase()) continue;
+      if (tokenAddr.toLowerCase() === stable.toLowerCase()) {
+        if (stable.toLowerCase() === config.usdcAddr.toLowerCase() || stable.toLowerCase() === config.usdtAddr.toLowerCase()) return 1.0;
+        continue;
+      }
       
       let bestFeePrice: number | null = null;
       let maxFeeLiquidity = ethers.BigNumber.from(0);
@@ -194,15 +200,18 @@ async function fetchTokenPriceFromV3(
               fee,
               amountIn,
               0
-            );
+            ).catch(() => ethers.BigNumber.from(0));
 
             if (amountOut.gt(0)) {
               const stableDecimals = await stableContract.decimals();
               let price = parseFloat(ethers.utils.formatUnits(amountOut, stableDecimals));
               
               if (stable.toLowerCase() === config.wethAddr.toLowerCase()) {
-                const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
-                if (wethPrice) price *= wethPrice;
+                // Fixed: Check tokenAddr to avoid recursive WETH price lookup when pricing WETH itself
+                if (tokenAddr.toLowerCase() !== config.wethAddr.toLowerCase()) {
+                  const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
+                  if (wethPrice) price *= wethPrice;
+                }
               }
               
               bestFeePrice = price;
@@ -230,17 +239,31 @@ async function fetchTokenPriceFromDex(
   chainId: number,
   isInternalWethCall: boolean = false
 ): Promise<number | null> {
+  // Check if we are fetching price for WETH/MATIC itself to avoid infinite recursion
+  const config = CHAIN_CONFIG[chainId];
+  if (config && tokenAddr.toLowerCase() === config.wethAddr.toLowerCase() && isInternalWethCall) {
+     // If we are here, we are trying to find WETH price to price another token, 
+     // but we should use a direct stable pair for WETH instead of recursive call.
+     // We'll proceed but skip the recursion in the factory loop.
+  }
+
   let retries = 2;
   while (retries > 0) {
     try {
-      const config = CHAIN_CONFIG[chainId];
       if (!config) return null;
 
       const provider = await getProvider(chainId);
       const tokenAddress = ethers.utils.getAddress(tokenAddr);
 
+      // Specific handling for Native POL/MATIC on Polygon (0x0000...1010)
+      // Uniswap V3 often has the best liquidity for this.
+      const isPolygonNative = chainId === 137 && (
+        tokenAddr.toLowerCase() === "0x0000000000000000000000000000000000001010" || 
+        tokenAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      );
+
       // Try Uniswap V3 first as it often has better liquidity for major tokens
-      if (!isInternalWethCall) {
+      if (!isInternalWethCall || isPolygonNative) {
         const v3Price = await fetchTokenPriceFromV3(tokenAddress, chainId, provider);
         if (v3Price) return v3Price;
       }
@@ -313,6 +336,13 @@ async function fetchTokenPriceFromDex(
                 if (targetStable.toLowerCase() === config.wethAddr.toLowerCase() || 
                     targetStable.toLowerCase() === "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619".toLowerCase() ||
                     targetStable.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".toLowerCase()) {
+                  
+                  // Avoid recursive WETH calls if we are already in one
+                  if (tokenAddress.toLowerCase() === config.wethAddr.toLowerCase()) {
+                    // We are looking for WETH price, and we found a WETH pair? Skip.
+                    continue;
+                  }
+
                   const wethPrice = await fetchTokenPriceFromDex(targetStable, chainId, true);
                   if (wethPrice) priceInStable *= wethPrice;
                 }

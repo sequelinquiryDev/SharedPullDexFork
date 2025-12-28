@@ -102,7 +102,7 @@ async function getOnChainPrice(address: string, chainId: number): Promise<OnChai
       onChainCache.delete(cacheKey);
       onChainCache.set(cacheKey, result);
 
-      // Immediate singleflight to connected subscribers
+      // Immediate singleflight to ALL connected subscribers globally
       const sub = activeSubscriptions.get(cacheKey);
       if (sub && sub.clients.size > 0) {
         const msg = JSON.stringify({ type: 'price', data: result, address, chainId });
@@ -410,6 +410,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             if (!activeSubscriptions.has(key)) {
               activeSubscriptions.set(key, { clients: new Set(), lastSeen: Date.now() });
             }
+            // Ensure client is added to global active subscribers
             activeSubscriptions.get(key)!.clients.add(ws);
           }
           
