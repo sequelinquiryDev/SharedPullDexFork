@@ -424,15 +424,22 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             activeSub.lastSeen = Date.now();
           }
 
-          // Client Imeadietly requests price from server cachings when SUBSCRIBED
+          // OPTIMIZED: Send cached price immediately to client in parallel with fetching fresh data
           const cachedPrice = onChainCache.get(key);
           if (cachedPrice && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'price', data: cachedPrice, address: data.address, chainId: data.chainId }));
-          } else {
-            // If server doesn't have caching, initiate direct fetch and broadcast
-            // This happens when a new token is added or cache is empty
-            getOnChainPrice(data.address, data.chainId);
+            // Send cached price immediately without blocking
+            try {
+              ws.send(JSON.stringify({ type: 'price', data: cachedPrice, address: data.address, chainId: data.chainId }));
+            } catch (err) {
+              console.error(`[WS] Error sending cached price:`, err);
+            }
           }
+          
+          // Fetch fresh price in background (doesn't block subscription)
+          // This automatically broadcasts to all subscribers when ready
+          getOnChainPrice(data.address, data.chainId).catch(err => {
+            console.error(`[WS] Background price fetch error:`, err);
+          });
           
           const analyticsKey = `analytics-${key}`;
           const aSub = analyticsSubscriptions.get(analyticsKey);
@@ -916,6 +923,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       cachedPrice: onChainCache.get(key) ? 'YES' : 'NO',
       cachedAnalytics: analyticsCache.get(`analytics-${key}`) ? 'YES' : 'NO',
     });
+  });
+
+  // Clear pool cache endpoint for server maintenance
+  app.post("/api/admin/clear-pool-cache", async (req, res) => {
+    try {
+      const { clearAllPoolCache, clearPoolCacheFor } = await import("./poolCacheManager");
+      const { all, tokenAddr, stableAddr, chainId } = req.body;
+      
+      if (all) {
+        clearAllPoolCache();
+        res.json({ success: true, message: "All pool cache cleared" });
+      } else if (tokenAddr && stableAddr && chainId) {
+        clearPoolCacheFor(tokenAddr, stableAddr, chainId);
+        res.json({ success: true, message: `Pool cache cleared for token pair` });
+      } else {
+        res.status(400).json({ error: "Provide either 'all: true' or 'tokenAddr', 'stableAddr', 'chainId'" });
+      }
+    } catch (e) {
+      console.error(`[PoolCache] Clear error:`, e);
+      res.status(500).json({ error: "Failed to clear cache" });
+    }
   });
 
   return httpServer;

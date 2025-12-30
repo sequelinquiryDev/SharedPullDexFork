@@ -161,3 +161,25 @@ export function getFactoryPriority(chainId: number): {
 setInterval(() => {
   cleanupOldPoolCache();
 }, 6 * 60 * 60 * 1000);
+
+/**
+ * Clear entire pool cache immediately
+ * IMPORTANT: Call this when you change pool addresses or after server updates
+ */
+export function clearAllPoolCache() {
+  const count = poolCache.size;
+  poolCache.clear();
+  console.log(`[PoolCache] CLEARED entire pool cache (${count} entries removed)`);
+}
+
+/**
+ * Clear cache for specific token pair
+ * Useful when a pool becomes inactive
+ */
+export function clearPoolCacheFor(tokenAddr: string, stableAddr: string, chainId: number) {
+  const key = `${chainId}-${tokenAddr.toLowerCase()}-${stableAddr.toLowerCase()}`;
+  if (poolCache.has(key)) {
+    poolCache.delete(key);
+    console.log(`[PoolCache] Cleared specific pool cache for ${key}`);
+  }
+}

@@ -15,6 +15,7 @@ const CHAIN_CONFIG: Record<
     usdcAddr: string;
     usdtAddr: string;
     wethAddr: string;
+    wmaticAddr?: string;
     factories: string[];
   }
 > = {
@@ -54,6 +55,7 @@ const CHAIN_CONFIG: Record<
     usdcAddr: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
     usdtAddr: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
     wethAddr: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+    wmaticAddr: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", // WMATIC for native POL pricing
     factories: [
       "0x5757371414417b8C6CAd16e5dBb0d812eEA2d29c", // QuickSwap
       "0xc35DADB65012eC5796536bD9864eD8773aBc74C4", // SushiSwap
@@ -250,18 +252,25 @@ async function fetchTokenPriceFromDex(
     return null;
   }
 
-  // CRITICAL: Detect native coins FIRST
+  // CRITICAL: Detect native coins FIRST and convert to wrapped version
   const isNativeETH = chainId === 1 && tokenAddr.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
   const isNativePolygon = chainId === 137 && (
     tokenAddr.toLowerCase() === "0x0000000000000000000000000000000000001010" || 
     tokenAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   );
+  
+  // CRITICAL FIX: For Polygon native coin (POL), use WMATIC for pricing
+  let effectiveTokenAddr = tokenAddr;
+  if (isNativePolygon && config.wmaticAddr) {
+    console.log(`[OnChainFetcher] Converting Polygon native to WMATIC for pricing: ${tokenAddr} -> ${config.wmaticAddr}`);
+    effectiveTokenAddr = config.wmaticAddr;
+  }
 
   let retries = 2;
   while (retries > 0) {
     try {
       const provider = await getProvider(chainId);
-      const tokenAddress = ethers.utils.getAddress(tokenAddr);
+      const tokenAddress = ethers.utils.getAddress(effectiveTokenAddr);
 
       // Try Uniswap V3 first as it often has better liquidity for major tokens
       // Always try V3 for native coins since they usually have best liquidity there
