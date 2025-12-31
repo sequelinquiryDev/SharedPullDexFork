@@ -33,14 +33,14 @@ const CHAIN_CONFIG: Record<
     usdtAddr: "0xdac17f958d2ee523a2206206994597c13d831ec7",
     wethAddr: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
     factories: [
-      "0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f", // Uniswap V2
-      "0xc0aee478e3658e2610c5f7a4a2e1777ce9e37608", // SushiSwap
-      "0x115934131916c8b277dd010ee02de363c09d037c", // ShibaSwap
-      "0x01af51a2f11b10025d8f0429408544b9e4936a00", // Kyber V2
-      "0xba12222222228d8ba445958a75a0704d566bf2c8", // Balancer V2 Vault
-      "0x1f98431c8ad98523631ae4a59f267346ea31f984", // Uniswap V3 Factory
-      "0xef1c6e67703c7bd7107eed8303fbe6ec2554ee6b", // Uniswap Universal Router
-      "0xa5e0829caced8ffddf9ecdf2f0072185a3d19ac9", // Fraxswap
+      "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f", // Uniswap V2
+      "0xC0AEe478e3658e2610c5F7A4A2E1777cE9e37608", // SushiSwap
+      "0x115934131916C8b277dd010Ee02de363c09d037c", // ShibaSwap
+      "0x01af51A2f11B10025D8F0429408544B9E4936A00", // Kyber V2
+      "0xBA12222222228d8Ba445958a75a0704d566BF2C8", // Balancer V2 Vault
+      "0x1f98431c8ad98523631ae4a59f267346ea31F984", // Uniswap V3 Factory
+      "0xef1c6e67703c7bd7107eed8303fbe6ec2554ee6b", // Uniswap Universal Router (V2/V3)
+      "0xA5E0829CaCEd8fFDDF9ecdf2f0072185A3D19Ac9", // Fraxswap
     ],
   },
   137: {
@@ -54,17 +54,17 @@ const CHAIN_CONFIG: Record<
     ],
     usdcAddr: "0x2791bca1f2de4661ed88a30c99a7a9449aa84174",
     usdtAddr: "0xc2132d05d31c914a87c6611c10748aeb04b58e8f",
-    wethAddr: "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619",
-    wmaticAddr: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", // WMATIC for native POL pricing
+    wethAddr: "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619",
+    wmaticAddr: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270", // WMATIC for native POL pricing
     factories: [
-      "0x5757371414417b8c6cad16e5dbb0d812eea2d29c", // QuickSwap
-      "0xc35dadb65012ec5796536bd9864ed8773abc74c4", // SushiSwap
-      "0x9e5a52f57b30f751704e67bc790382379796230d", // ApeSwap
-      "0x115934131916c8b277dd010ee02de363c09d037c", // JetSwap
-      "0xba12222222228d8ba445958a75a0704d566bf2c8", // Balancer V2 Vault
+      "0x5757371414417b8C6CAd16e5dBb0d812eEA2d29c", // QuickSwap
+      "0xc35DADB65012eC5796536bD9864eD8773aBc74C4", // SushiSwap
+      "0x9e5A52f57b30f751704e67BC790382379796230d", // ApeSwap
+      "0x115934131916C8b277dd010Ee02de363c09d037c", // JetSwap
+      "0xBA12222222228d8Ba445958a75a0704d566BF2C8", // Balancer V2 Vault
       "0x4b7b2586616428768e916294711f56860d5e1ec9", // Retro
       "0xdb4044169722883313d4b68420089e504c6d67f7", // Pearl
-      "0x1f98431c8ad98523631ae4a59f267346ea31f984", // Uniswap V3 Factory (Polygon)
+      "0x1F98431c8aD98523631AE4a59f267346ea31F984", // Uniswap V3 Factory (Polygon)
     ],
   },
 };
@@ -252,27 +252,18 @@ async function fetchTokenPriceFromDex(
     return null;
   }
 
-  // CRITICAL: Normalize address first - fix checksum issues
-  let normalizedAddr: string;
-  try {
-    normalizedAddr = ethers.utils.getAddress(tokenAddr);
-  } catch (e) {
-    console.warn(`[OnChainFetcher] Invalid address ${tokenAddr}: ${e instanceof Error ? e.message : e}`);
-    return null;
-  }
-
   // CRITICAL: Detect native coins FIRST and convert to wrapped version
-  const isNativeETH = chainId === 1 && normalizedAddr.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+  const isNativeETH = chainId === 1 && tokenAddr.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
   const isNativePolygon = chainId === 137 && (
-    normalizedAddr.toLowerCase() === "0x0000000000000000000000000000000000001010" || 
-    normalizedAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    tokenAddr.toLowerCase() === "0x0000000000000000000000000000000000001010" || 
+    tokenAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   );
   
   // CRITICAL FIX: For Polygon native coin (POL), use WMATIC for pricing
-  let effectiveTokenAddr = normalizedAddr;
+  let effectiveTokenAddr = tokenAddr;
   if (isNativePolygon && config.wmaticAddr) {
-    console.log(`[OnChainFetcher] Converting Polygon native to WMATIC for pricing: ${normalizedAddr} -> ${config.wmaticAddr}`);
-    effectiveTokenAddr = ethers.utils.getAddress(config.wmaticAddr);
+    console.log(`[OnChainFetcher] Converting Polygon native to WMATIC for pricing: ${tokenAddr} -> ${config.wmaticAddr}`);
+    effectiveTokenAddr = config.wmaticAddr;
   }
 
   let retries = 2;
@@ -327,16 +318,8 @@ async function fetchTokenPriceFromDex(
         const factoryAddr = config.factories[factoryIdx];
         if (!factoryAddr) continue;
 
-        let normalizedFactoryAddr: string;
         try {
-          normalizedFactoryAddr = ethers.utils.getAddress(factoryAddr);
-        } catch (e) {
-          console.warn(`[OnChainFetcher] Invalid factory address ${factoryAddr}: ${e instanceof Error ? e.message : e}`);
-          continue;
-        }
-
-        try {
-          const factory = new ethers.Contract(normalizedFactoryAddr, FACTORY_ABI, provider);
+          const factory = new ethers.Contract(factoryAddr, FACTORY_ABI, provider);
           
           for (const targetStable of STABLECOINS) {
             if (tokenAddress.toLowerCase() === targetStable.toLowerCase()) continue;
