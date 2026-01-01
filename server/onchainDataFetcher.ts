@@ -343,36 +343,52 @@ async function fetchTokenPriceFromDex(
             }
 
             // CRITICAL: Ensure stablecoin belongs to the current chain's config or is a cross-chain fallback
-            // This prevents trying to look up Ethereum-only stables on Polygon and vice versa
             const isChainStable = targetStable.toLowerCase() === config.usdcAddr.toLowerCase() || 
                                 targetStable.toLowerCase() === config.usdtAddr.toLowerCase() ||
                                 targetStable.toLowerCase() === config.wethAddr.toLowerCase() ||
                                 (config.wmaticAddr && targetStable.toLowerCase() === config.wmaticAddr.toLowerCase());
             
+            // Known valid stables for this chain
+            const polyStables = [
+              "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", // USDC
+              "0xc2132d05d31c914a87c6611c10748aeb04b58e8f", // USDT
+              "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063", // DAI
+              "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", // WETH
+              "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270", // WMATIC
+              "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", // USDC.e
+              "0x1bfd67037b42cf73acf2047067bd4f2c47d9bfd6"  // WBTC
+            ];
+            const ethStables = [
+              "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // USDC
+              "0xdac17f958d2ee523a2206206994597c13d831ec7", // USDT
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // WETH
+              "0x6b175474e89094c44da98b954eedeac495271d0f", // DAI
+              "0x853d955acef822db058eb8505911ed77f175b99e"  // FRAX
+            ];
+
             // If not a primary chain stable, only try if it's a known liquid fallback for this chain
-            if (!isChainStable && chainId === 137) {
-              // Polygon specific liquid stables
-              const polyStables = ["0x2791bca1f2de4661ed88a30c99a7a9449aa84174", "0xc2132d05d31c914a87c6611c10748aeb04b58e8f", "0x8f3cf7ad23cd3cadbd9735aff958023239c6a063", "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619", "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270"];
-              if (!polyStables.includes(targetStable.toLowerCase())) continue;
-            } else if (!isChainStable && chainId === 1) {
-              // Ethereum specific liquid stables
-              const ethStables = ["0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "0xdac17f958d2ee523a2206206994597c13d831ec7", "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "0x6b175474e89094c44da98b954eedeac495271d0f", "0x853d955acef822db058eb8505911ed77f175b99e"];
-              if (!ethStables.includes(targetStable.toLowerCase())) continue;
+            if (!isChainStable) {
+              if (chainId === 137 && !polyStables.includes(targetStable.toLowerCase())) continue;
+              if (chainId === 1 && !ethStables.includes(targetStable.toLowerCase())) continue;
             }
 
             // Check if we have a cached pool for this pair
             const cachedPool = getCachedPool(tokenAddress, checksumStable, chainId);
-        
-        try {
-          let pairAddr: string;
-          
-          if (cachedPool) {
-            // Use cached pool if available
-            pairAddr = cachedPool.poolAddress;
-          } else {
-            // Discover new pool
-            pairAddr = await factory.getPair(tokenAddress, checksumStable);
-          }
+            
+            try {
+              let pairAddr: string;
+              
+              if (cachedPool) {
+                // Use cached pool if available
+                pairAddr = cachedPool.poolAddress;
+              } else {
+                // Discover new pool
+                try {
+                  pairAddr = await factory.getPair(tokenAddress, checksumStable);
+                } catch (e) {
+                  continue;
+                }
+              }
 
               if (pairAddr === ethers.constants.AddressZero) continue;
 
