@@ -299,12 +299,15 @@ export function TokenInput({
       currentTokenKeys.add(`${t.chainId || chainId}-${selectedToken.address.toLowerCase()}`);
     }
 
-    // Cleanup unsubscribers for tokens no longer in view or selected
-    unsubscribersRef.current.forEach((unsub, key) => {
-      if (!currentTokenKeys.has(key)) {
-        unsub();
-        unsubscribersRef.current.delete(key);
-      }
+    // Parallelized subscription management
+    const toUnsubscribe: string[] = [];
+    unsubscribersRef.current.forEach((_, key) => {
+      if (!currentTokenKeys.has(key)) toUnsubscribe.push(key);
+    });
+
+    toUnsubscribe.forEach(key => {
+      unsubscribersRef.current.get(key)?.();
+      unsubscribersRef.current.delete(key);
     });
 
     suggestions.forEach(({ token }) => {
@@ -313,16 +316,36 @@ export function TokenInput({
       const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
       
       if (!unsubscribersRef.current.has(subKey)) {
-        const unsubscribe = subscribeToPrice(token.address, tokenChainId, (priceData) => {
-          setSuggestions(prev => prev.map(item => {
-            const itemChainId = (item.token as ExtendedToken).chainId || chainId;
-            if (item.token.address.toLowerCase() === token.address.toLowerCase() && itemChainId === tokenChainId) {
-              return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
-            }
-            return item;
-          }));
+        // Parallelize initial price fetch and socket subscription
+        Promise.all([
+          fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`)
+            .then(res => res.json())
+            .catch(() => null),
+          new Promise<() => void>((resolve) => {
+            const unsub = subscribeToPrice(token.address, tokenChainId, (priceData) => {
+              if (!priceData || priceData.price === undefined) return;
+              setSuggestions(prev => prev.map(item => {
+                const itemChainId = (item.token as ExtendedToken).chainId || chainId;
+                if (item.token.address.toLowerCase() === token.address.toLowerCase() && itemChainId === tokenChainId) {
+                  return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
+                }
+                return item;
+              }));
+            });
+            resolve(unsub);
+          })
+        ]).then(([priceData, unsubscribe]) => {
+          if (priceData && priceData.price !== undefined) {
+            setSuggestions(prev => prev.map(item => {
+              const itemChainId = (item.token as ExtendedToken).chainId || chainId;
+              if (item.token.address.toLowerCase() === token.address.toLowerCase() && itemChainId === tokenChainId) {
+                return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
+              }
+              return item;
+            }));
+          }
+          unsubscribersRef.current.set(subKey, unsubscribe);
         });
-        unsubscribersRef.current.set(subKey, unsubscribe);
       }
     });
   }, [showSuggestions, suggestions, selectedToken, chainId]);
@@ -533,12 +556,12 @@ export function TokenInput({
               return (
                 <div
                   key={`${token.address}-${tokenChainId || ''}`}
-                  className="suggestion-item"
+                  className="suggestion-item hover-elevate active-elevate-2"
                   onMouseDown={(e) => {
                     e.preventDefault();
                     handleSelectToken(token);
                   }}
-                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  style={{ cursor: 'pointer', userSelect: 'none', transition: 'all 0.15s ease' }}
                 >
                   <div className="suggestion-left">
                     <img 
@@ -570,8 +593,14 @@ export function TokenInput({
                       </div>
                     </div>
                   </div>
-                  <div className="suggestion-price-pill">
-                    <div style={{ fontSize: '12px', fontWeight: 700 }}>
+                  <div className="suggestion-price-pill" style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    backdropFilter: 'blur(4px)',
+                    minWidth: '80px',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#fff' }}>
                       {token.currentPrice ? formatUSD(token.currentPrice, true) : '—'}
                     </div>
                     {typeof token.priceChange24h === 'number' && (
