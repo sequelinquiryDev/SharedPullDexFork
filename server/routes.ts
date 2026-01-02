@@ -49,93 +49,9 @@ const watchedTokens = new Set<string>();
 const analyticsSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number, ttlTimer?: NodeJS.Timeout }>();
 const analyticsFetchingLocks = new Map<string, Promise<any>>();
 const iconCache = new Map<string, { url: string; expires: number }>();
-const ICON_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const ICON_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const iconFetchingInFlight = new Map<string, Promise<string | null>>();
-
-async function fetchTokenIconWithFallbacks(address: string, chainId: number): Promise<string | null> {
-  const cacheKey = `${chainId}-${address.toLowerCase()}`;
-  
-  // 1. Check server-side cache
-  const cached = iconCache.get(cacheKey);
-  if (cached && Date.now() < cached.expires) {
-    return cached.url;
-  }
-
-  // 2. Single-flight lock
-  if (iconFetchingInFlight.has(cacheKey)) {
-    return iconFetchingInFlight.get(cacheKey)!;
-  }
-
-  const fetchPromise = (async () => {
-    const addr = address.toLowerCase();
-    const platform = chainId === 1 ? 'ethereum' : 'polygon-pos';
-    
-    // Fallback list of icon providers
-    const providers = [
-      // GeckoTerminal (Requested)
-      `https://api.geckoterminal.com/api/v2/networks/${chainId === 1 ? 'eth' : 'polygon_pos'}/tokens/${addr}`,
-      // CoinGecko
-      `https://api.coingecko.com/api/v3/coins/${platform}/contract/${addr}`,
-      // Trust Wallet Assets
-      `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${chainId === 1 ? 'ethereum' : 'polygon'}/assets/${ethers.utils.getAddress(addr)}/logo.png`,
-    ];
-
-    for (const url of providers) {
-      try {
-        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-        if (!res.ok) continue;
-
-        let iconUrl: string | null = null;
-        if (url.includes('geckoterminal')) {
-          const data = await res.json();
-          iconUrl = data.data?.attributes?.image_url;
-        } else if (url.includes('coingecko')) {
-          const data = await res.json();
-          iconUrl = data.image?.large || data.image?.small;
-        } else {
-          iconUrl = url; // TrustWallet direct image
-        }
-
-        if (iconUrl) {
-          iconCache.set(cacheKey, { url: iconUrl, expires: Date.now() + ICON_CACHE_TTL });
-          
-          // Broadcast to all subscribed users in parallel via WebSocket
-          const sub = activeSubscriptions.get(cacheKey);
-          if (sub) {
-            const msg = JSON.stringify({ type: 'icon', address, chainId, url: iconUrl });
-            sub.clients.forEach(client => {
-              if (client.readyState === WebSocket.OPEN) {
-                client.send(msg);
-              }
-            });
-          }
-          return iconUrl;
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    return null;
-  })();
-
-  iconFetchingInFlight.set(cacheKey, fetchPromise);
-  try {
-    return await fetchPromise;
-  } finally {
-    iconFetchingInFlight.delete(cacheKey);
-  }
-}
-
-export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  // ... existing code ...
-  
-  app.get("/api/icon", async (req, res) => {
-    const { address, chainId } = req.query;
-    if (!address || !chainId) return res.status(400).send("Missing params");
-    const url = await fetchTokenIconWithFallbacks(address as string, Number(chainId));
-    if (url) return res.redirect(url);
-    res.status(404).send("Icon not found");
-  });
+const iconRefreshTimers = new Map<string, NodeJS.Timeout>();
 
 const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: string; wethAddr: string; factories: string[]; scanApi: string; scanKey: string }> = {
   1: {
@@ -524,11 +440,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           // This automatically broadcasts to all subscribers when ready
           getOnChainPrice(data.address, data.chainId).catch(err => {
             console.error(`[WS] Background price fetch error:`, err);
-          });
-
-          // Parallel Icon Subscription: Fetch and broadcast icon in parallel
-          fetchTokenIconWithFallbacks(data.address, data.chainId).catch(err => {
-            console.error(`[WS] Background icon fetch error:`, err);
           });
           
           const analyticsKey = `analytics-${key}`;

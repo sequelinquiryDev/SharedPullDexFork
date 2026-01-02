@@ -113,20 +113,9 @@ export async function loadTokensAndMarkets(): Promise<void> {
   ]);
   console.log("✓ Token lists loaded from API");
   
-  // Listen for price and icon updates from server
+  // Listen for token refresh events from server (single-flight refresh)
+  // When tokens are added by users, server will signal refresh within 5 seconds
   if (typeof window !== 'undefined' && window.addEventListener) {
-    window.addEventListener('message', (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'icon') {
-          const key = getIconCacheKey(data.address, data.chainId);
-          iconCache.set(key, { url: data.url, expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
-          // Dispatch a custom event to notify components
-          window.dispatchEvent(new CustomEvent('token-icon-updated', { detail: data }));
-        }
-      } catch (e) {}
-    });
-    
     window.addEventListener('refresh-tokens', async () => {
       await Promise.all([
         refreshTokensForChain(1),
