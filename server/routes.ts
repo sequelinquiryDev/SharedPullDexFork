@@ -68,6 +68,29 @@ async function fetchAndBase64Icon(address: string, chainId: number): Promise<str
       const checksumAddr = ethers.utils.getAddress(address);
       const chainPath = chainId === 1 ? 'ethereum' : 'polygon';
       
+      // 1. Try to get logoURI from local tokens.json first
+      try {
+        const tokensPath = path.join(process.cwd(), "client", "src", "lib", "tokens.json");
+        if (fs.existsSync(tokensPath)) {
+          const tokens = JSON.parse(fs.readFileSync(tokensPath, "utf-8"));
+          const chainKey = chainId === 1 ? "ethereum" : "polygon";
+          const tokenMeta = tokens[chainKey]?.find((t: any) => t.address.toLowerCase() === address.toLowerCase());
+          
+          if (tokenMeta?.logoURI && tokenMeta.logoURI.startsWith('http')) {
+            const imgRes = await fetch(tokenMeta.logoURI);
+            if (imgRes.ok) {
+              const buffer = await imgRes.arrayBuffer();
+              const base64 = `data:${imgRes.headers.get('content-type') || 'image/png'};base64,${Buffer.from(buffer).toString('base64')}`;
+              iconCache.set(cacheKey, { url: base64, expires: Date.now() + ICON_CACHE_TTL });
+              return base64;
+            }
+          }
+        }
+      } catch (e) {
+        console.error(`[IconCache] Error reading tokens.json:`, e);
+      }
+
+      // 2. Fallback to other sources
       const sources = [
         `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${chainPath}/assets/${checksumAddr}/logo.png`,
         `https://assets-cdn.trustwallet.com/blockchains/${chainPath}/assets/${checksumAddr}/logo.png`,
