@@ -306,7 +306,21 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
       />
 
       {showSuggestions && (
-        <div ref={suggestionsRef} className="token-search-suggestions" style={{ zIndex: 1001 }}>
+        <div ref={suggestionsRef} className="token-search-suggestions" style={{ 
+          zIndex: 9999,
+          position: 'absolute',
+          top: '100%',
+          left: 0,
+          right: 0,
+          maxHeight: '400px',
+          overflowY: 'auto',
+          background: 'rgba(15, 15, 20, 0.95)',
+          backdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          borderRadius: '12px',
+          marginTop: '8px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+        }}>
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px' }}>
               {[...Array(3)].map((_, i) => (

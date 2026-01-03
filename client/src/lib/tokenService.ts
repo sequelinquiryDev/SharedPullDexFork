@@ -267,7 +267,7 @@ export async function fetchTokenIcon(token: Token, chainId?: number): Promise<st
         if (data.url) {
           // Cache session-wide for 7 days (match server TTL)
           iconCache.set(cacheKey, { url: data.url, expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
-          return data.url;
+          return data.url as string;
         }
       }
     } catch (e) {

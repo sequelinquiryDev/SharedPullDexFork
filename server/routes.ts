@@ -72,11 +72,13 @@ async function fetchAndBase64Icon(address: string, chainId: number): Promise<str
       try {
         const tokensPath = path.join(process.cwd(), "client", "src", "lib", "tokens.json");
         if (fs.existsSync(tokensPath)) {
-          const tokens = JSON.parse(fs.readFileSync(tokensPath, "utf-8"));
+          const tokensRaw = fs.readFileSync(tokensPath, "utf-8");
+          const tokens = JSON.parse(tokensRaw);
           const chainKey = chainId === 1 ? "ethereum" : "polygon";
           const tokenMeta = tokens[chainKey]?.find((t: any) => t.address.toLowerCase() === address.toLowerCase());
           
           if (tokenMeta?.logoURI && tokenMeta.logoURI.startsWith('http')) {
+            console.log(`[IconCache] Fetching from tokens.json URI: ${tokenMeta.logoURI}`);
             const imgRes = await fetch(tokenMeta.logoURI);
             if (imgRes.ok) {
               const buffer = await imgRes.arrayBuffer();
@@ -533,10 +535,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             if (!analyticsSubscriptions.has(analyticsKey)) {
               analyticsSubscriptions.set(analyticsKey, { clients: new Set(), lastSeen: Date.now() });
             }
-            analyticsSubscriptions.get(analyticsKey)!.clients.add(ws);
+            const currentASub = analyticsSubscriptions.get(analyticsKey);
+            if (currentASub) {
+              currentASub.clients.add(ws);
+            }
           }
           
-          analyticsSubscriptions.get(analyticsKey)!.lastSeen = Date.now();
+          const analyticsSub = analyticsSubscriptions.get(analyticsKey);
+          if (analyticsSub) {
+            analyticsSub.lastSeen = Date.now();
+          }
           
           // Send initial analytics data to client
           // Background cache will update this token's analytics
