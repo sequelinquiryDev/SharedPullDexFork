@@ -49,90 +49,9 @@ const watchedTokens = new Set<string>();
 const analyticsSubscriptions = new Map<string, { clients: Set<WebSocket>, lastSeen: number, ttlTimer?: NodeJS.Timeout }>();
 const analyticsFetchingLocks = new Map<string, Promise<any>>();
 const iconCache = new Map<string, { url: string; expires: number }>();
-const ICON_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const ICON_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const iconFetchingInFlight = new Map<string, Promise<string | null>>();
-
-async function fetchAndBase64Icon(address: string, chainId: number): Promise<string | null> {
-  const cacheKey = `${chainId}-${address.toLowerCase()}`;
-  const cached = iconCache.get(cacheKey);
-  if (cached && Date.now() < cached.expires) {
-    return cached.url;
-  }
-
-  if (iconFetchingInFlight.has(cacheKey)) {
-    return iconFetchingInFlight.get(cacheKey)!;
-  }
-
-  const promise = (async () => {
-    try {
-      const checksumAddr = ethers.utils.getAddress(address);
-      const chainPath = chainId === 1 ? 'ethereum' : 'polygon';
-      
-      // 1. Try to get logoURI from local tokens.json first
-      try {
-        const tokensPath = path.join(process.cwd(), "client", "src", "lib", "tokens.json");
-        if (fs.existsSync(tokensPath)) {
-          const tokensRaw = fs.readFileSync(tokensPath, "utf-8");
-          const tokens = JSON.parse(tokensRaw);
-          const chainKey = chainId === 1 ? "ethereum" : "polygon";
-          const tokenMeta = tokens[chainKey]?.find((t: any) => t.address.toLowerCase() === address.toLowerCase());
-          
-          if (tokenMeta?.logoURI && tokenMeta.logoURI.startsWith('http')) {
-            console.log(`[IconCache] Fetching from tokens.json URI: ${tokenMeta.logoURI}`);
-            const imgRes = await fetch(tokenMeta.logoURI);
-            if (imgRes.ok) {
-              const buffer = await imgRes.arrayBuffer();
-              const base64 = `data:${imgRes.headers.get('content-type') || 'image/png'};base64,${Buffer.from(buffer).toString('base64')}`;
-              iconCache.set(cacheKey, { url: base64, expires: Date.now() + ICON_CACHE_TTL });
-              return base64;
-            }
-          }
-        }
-      } catch (e) {
-        console.error(`[IconCache] Error reading tokens.json:`, e);
-      }
-
-      // 2. Fallback to other sources
-      const sources = [
-        `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${chainPath}/assets/${checksumAddr}/logo.png`,
-        `https://assets-cdn.trustwallet.com/blockchains/${chainPath}/assets/${checksumAddr}/logo.png`,
-        `https://api.coingecko.com/api/v3/coins/${chainId === 1 ? 'ethereum' : 'polygon-pos'}/contract/${address.toLowerCase()}`
-      ];
-
-      for (const source of sources) {
-        try {
-          const response = await fetch(source);
-          if (!response.ok) continue;
-
-          let iconUrl = source;
-          if (source.includes('coingecko')) {
-            const data = await response.json();
-            iconUrl = data.image?.small || data.image?.large || data.image?.thumb;
-            if (!iconUrl) continue;
-          }
-
-          const imgRes = await fetch(iconUrl);
-          if (!imgRes.ok) continue;
-          
-          const buffer = await imgRes.arrayBuffer();
-          const base64 = `data:${imgRes.headers.get('content-type') || 'image/png'};base64,${Buffer.from(buffer).toString('base64')}`;
-          iconCache.set(cacheKey, { url: base64, expires: Date.now() + ICON_CACHE_TTL });
-          return base64;
-        } catch (e) {
-          continue;
-        }
-      }
-    } catch (e) {
-      console.error(`[IconCache] Error for ${address}:`, e);
-    } finally {
-      iconFetchingInFlight.delete(cacheKey);
-    }
-    return null;
-  })();
-
-  iconFetchingInFlight.set(cacheKey, promise);
-  return promise;
-}
+const iconRefreshTimers = new Map<string, NodeJS.Timeout>();
 
 const CHAIN_CONFIG: Record<number, { rpc: string; usdcAddr: string; usdtAddr: string; wethAddr: string; factories: string[]; scanApi: string; scanKey: string }> = {
   1: {
@@ -535,16 +454,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             if (!analyticsSubscriptions.has(analyticsKey)) {
               analyticsSubscriptions.set(analyticsKey, { clients: new Set(), lastSeen: Date.now() });
             }
-            const currentASub = analyticsSubscriptions.get(analyticsKey);
-            if (currentASub) {
-              currentASub.clients.add(ws);
-            }
+            analyticsSubscriptions.get(analyticsKey)!.clients.add(ws);
           }
           
-          const analyticsSub = analyticsSubscriptions.get(analyticsKey);
-          if (analyticsSub) {
-            analyticsSub.lastSeen = Date.now();
-          }
+          analyticsSubscriptions.get(analyticsKey)!.lastSeen = Date.now();
           
           // Send initial analytics data to client
           // Background cache will update this token's analytics
@@ -751,25 +664,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e) {
       console.error("[TokenSearch] Error:", e);
       res.status(500).send("Failed to fetch token metadata");
-    }
-  });
-
-  app.get("/api/icon", async (req, res) => {
-    const { address, chainId } = req.query;
-    if (!address || !chainId) return res.status(400).send("Missing params");
-    
-    try {
-      const base64 = await fetchAndBase64Icon(address as string, Number(chainId));
-      if (base64) {
-        // Cache-Control for browser to further reduce server load
-        res.setHeader('Cache-Control', 'public, max-age=604800'); // 7 days
-        res.json({ url: base64 });
-      } else {
-        res.status(404).send("Icon not found");
-      }
-    } catch (e) {
-      console.error(`[IconRoute] Error:`, e);
-      res.status(500).send("Internal error");
     }
   });
 

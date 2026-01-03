@@ -234,52 +234,13 @@ export function getIconCacheKey(address: string, chainId: number): string {
 export function getTokenLogoUrl(token: Token, chainId?: number): string {
   if (!token || !token.address) return getPlaceholderImage();
   const cid = chainId ?? config.chainId;
-  const cacheKey = getIconCacheKey(token.address, cid);
-  
-  // Check if we already have the base64 data in our session cache
-  const cached = iconCache.get(cacheKey);
-  if (cached && Date.now() < cached.expires) {
-    return cached.url;
-  }
-  
-  return `/api/icon?address=${token.address.toLowerCase()}&chainId=${cid}`;
+  const url = `/api/icon?address=${token.address.toLowerCase()}&chainId=${cid}`;
+  console.log(`[tokenService] Generated icon URL for ${token.symbol}: ${url}`);
+  return url;
 }
 
 export async function fetchTokenIcon(token: Token, chainId?: number): Promise<string> {
-  const cid = chainId ?? config.chainId;
-  const addr = token.address.toLowerCase();
-  const cacheKey = getIconCacheKey(addr, cid);
-
-  const cached = iconCache.get(cacheKey);
-  if (cached && Date.now() < cached.expires) {
-    return cached.url;
-  }
-
-  if (iconFetchingInFlight.has(cacheKey)) {
-    return iconFetchingInFlight.get(cacheKey)!;
-  }
-
-  const promise = (async () => {
-    try {
-      const res = await fetch(`/api/icon?address=${addr}&chainId=${cid}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          // Cache session-wide for 7 days (match server TTL)
-          iconCache.set(cacheKey, { url: data.url, expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
-          return data.url as string;
-        }
-      }
-    } catch (e) {
-      console.error('[TokenService] Icon fetch error:', e);
-    } finally {
-      iconFetchingInFlight.delete(cacheKey);
-    }
-    return getPlaceholderImage();
-  })();
-
-  iconFetchingInFlight.set(cacheKey, promise);
-  return promise;
+  return getTokenLogoUrl(token, chainId);
 }
 
 export interface OnChainAnalytics {
