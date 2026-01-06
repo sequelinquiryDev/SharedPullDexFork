@@ -60,6 +60,7 @@ async function loadTokensFromSelfHosted(chainId: number): Promise<Token[] | null
         symbol: t.symbol || '',
         name: t.name || '',
         decimals: decimals,
+        logoURI: t.logoURI || ''
       };
     }).filter((t: any) => t.address).filter(isTokenAllowed);
   } catch (e) {

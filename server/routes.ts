@@ -90,6 +90,22 @@ async function fetchAndBase64Icon(address: string, chainId: number): Promise<str
         console.error(`[IconCache] Error reading tokens.json:`, e);
       }
 
+      // 1.5. Check if it's a native token and use a known good icon
+      const isNative = (chainId === 1 && address.toLowerCase() === '0x0000000000000000000000000000000000000000') ||
+                      (chainId === 137 && address.toLowerCase() === '0x0000000000000000000000000000000000001010');
+      if (isNative) {
+        const nativeUrl = chainId === 1 
+          ? "https://assets.coingecko.com/coins/images/279/large/ethereum.png"
+          : "https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png";
+        const imgRes = await fetch(nativeUrl);
+        if (imgRes.ok) {
+          const buffer = await imgRes.arrayBuffer();
+          const base64 = `data:${imgRes.headers.get('content-type') || 'image/png'};base64,${Buffer.from(buffer).toString('base64')}`;
+          iconCache.set(cacheKey, { url: base64, expires: Date.now() + ICON_CACHE_TTL });
+          return base64;
+        }
+      }
+
       // 2. Fallback to other sources
       const sources = [
         `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${chainPath}/assets/${checksumAddr}/logo.png`,

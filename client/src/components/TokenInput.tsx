@@ -559,20 +559,23 @@ export function TokenInput({
                   className="suggestion-item hover-elevate active-elevate-2"
                   onMouseDown={(e) => {
                     e.preventDefault();
-                    handleSelectToken(token);
+                    onTokenSelect(token);
+                setShowSuggestions(false);
+              }}
+              style={{ cursor: 'pointer', userSelect: 'none', transition: 'all 0.15s ease' }}
+            >
+              <div className="suggestion-left">
+                <img 
+                  src={iconUrl} 
+                  alt={token.symbol}
+                  style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
+                  key={`icon-${token.address}-${tokenChainId}`}
+                  loading="lazy"
+                  onError={(e) => {
+                    console.log(`[TokenInput] Image failed to load: ${(e.target as HTMLImageElement).src}`);
+                    (e.target as HTMLImageElement).src = getPlaceholderImage();
                   }}
-                  style={{ cursor: 'pointer', userSelect: 'none', transition: 'all 0.15s ease' }}
-                >
-                  <div className="suggestion-left">
-                    <img 
-                      src={iconUrl} 
-                      alt={token.symbol}
-                      style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
-                      onError={(e) => {
-                        console.log(`[TokenInput] Image failed to load: ${(e.target as HTMLImageElement).src}`);
-                        (e.target as HTMLImageElement).src = getPlaceholderImage();
-                      }}
-                    />
+                />
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {token.symbol}
