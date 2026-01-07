@@ -558,9 +558,8 @@ export function TokenInput({
           ) : (
             suggestions.map(({ token, stats, price }) => {
               const tokenChainId = (token as ExtendedToken).chainId || chainId;
-              const iconUrl = getTokenLogoUrl(token, tokenChainId);
-              
-              console.log(`[TokenInput] Rendering ${token.symbol} with iconUrl: ${iconUrl}`);
+              // Force fresh URL construction for each render to ensure latest v param
+              const iconUrl = `/api/icon?address=${token.address.toLowerCase()}&chainId=${tokenChainId}&v=${Math.floor(Date.now() / 3600000)}`;
               
               const chainLabel = tokenChainId === 1 ? 'ETH' : tokenChainId === 137 ? 'POL' : null;
               return (
@@ -570,22 +569,21 @@ export function TokenInput({
                   onMouseDown={(e) => {
                     e.preventDefault();
                     onTokenSelect(token);
-                setShowSuggestions(false);
-              }}
-              style={{ cursor: 'pointer', userSelect: 'none', transition: 'all 0.15s ease' }}
-            >
-              <div className="suggestion-left">
-                <img 
-                  src={iconUrl} 
-                  alt={token.symbol}
-                  style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
-                  key={`icon-${token.address}-${tokenChainId}`}
-                  loading="lazy"
-                  onError={(e) => {
-                    console.log(`[TokenInput] Image failed to load: ${(e.target as HTMLImageElement).src}`);
-                    (e.target as HTMLImageElement).src = getPlaceholderImage();
+                    setShowSuggestions(false);
                   }}
-                />
+                  style={{ cursor: 'pointer', userSelect: 'none', transition: 'all 0.15s ease' }}
+                >
+                  <div className="suggestion-left">
+                    <img 
+                      src={iconUrl} 
+                      alt={token.symbol}
+                      style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
+                      key={`icon-${token.address}-${tokenChainId}-${searchQuery}`} // Add searchQuery to key to force remount on typing
+                      loading="eager" // Use eager loading for suggestions
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = getPlaceholderImage();
+                      }}
+                    />
                     <div>
                       <div style={{ fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         {token.symbol}
