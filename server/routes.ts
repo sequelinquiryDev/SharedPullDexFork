@@ -599,7 +599,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             analyticsSubscriptions.get(analyticsKey)!.clients.add(ws);
           }
           
-          analyticsSubscriptions.get(analyticsKey)!.lastSeen = Date.now();
+          const aSub = analyticsSubscriptions.get(analyticsKey);
+          if (aSub) {
+            aSub.lastSeen = Date.now();
+          }
           
           // Send initial analytics data to client
           // Background cache will update this token's analytics
