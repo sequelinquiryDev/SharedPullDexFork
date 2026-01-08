@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Token } from '@/lib/tokenService';
+import { Token, getTokenLogoUrl, getPlaceholderImage } from '@/lib/tokenService';
 import { formatUSD } from '@/lib/config';
 
+interface ExtendedToken extends Token {
+  chainId?: number;
+}
+
 interface TokenInfoSidebarProps {
-  fromToken: Token | null;
-  toToken: Token | null;
+  fromToken: ExtendedToken | null;
+  toToken: ExtendedToken | null;
   fromPriceUsd: number | null;
   toPriceUsd: number | null;
   fromChange24h?: number | null;
@@ -363,9 +367,14 @@ export function TokenInfoSidebar({
           {fromToken && (
             <div className="token-info-row">
               <div className="token-info-header">
-                {fromToken.logoURI && (
-                  <img src={fromToken.logoURI} alt={fromToken.symbol} onError={(e) => {(e.target as HTMLImageElement).style.display = 'none';}} />
-                )}
+                <img 
+                  src={getTokenLogoUrl(fromToken, fromToken.chainId || 1)} 
+                  alt={fromToken.symbol} 
+                  style={{ width: '28px', height: '28px', borderRadius: '50%' }}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = getPlaceholderImage();
+                  }} 
+                />
                 <div>
                   <div className="token-symbol">{fromToken.symbol}</div>
                   <div className="token-name">{fromToken.name}</div>
@@ -385,9 +394,14 @@ export function TokenInfoSidebar({
           {toToken && (
             <div className="token-info-row">
               <div className="token-info-header">
-                {toToken.logoURI && (
-                  <img src={toToken.logoURI} alt={toToken.symbol} onError={(e) => {(e.target as HTMLImageElement).style.display = 'none';}} />
-                )}
+                <img 
+                  src={getTokenLogoUrl(toToken, toToken.chainId || 1)} 
+                  alt={toToken.symbol} 
+                  style={{ width: '28px', height: '28px', borderRadius: '50%' }}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = getPlaceholderImage();
+                  }} 
+                />
                 <div>
                   <div className="token-symbol">{toToken.symbol}</div>
                   <div className="token-name">{toToken.name}</div>
