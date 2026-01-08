@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Token, getTokenLogoUrl, getPlaceholderImage } from '@/lib/tokenService';
+import { Token, fetchTokenIcon, getPlaceholderImage } from '@/lib/tokenService';
 import { formatUSD } from '@/lib/config';
 
 interface ExtendedToken extends Token {
@@ -289,6 +289,31 @@ function Sparkline({ trend, change, isLoading, priceHistory }: { trend: 'up' | '
   return <canvas ref={canvasRef} style={{ width: '100px', height: '36px' }} />;
 }
 
+function TokenIcon({ token }: { token: ExtendedToken }) {
+  const [iconUrl, setIconUrl] = useState<string>(getPlaceholderImage());
+  
+  useEffect(() => {
+    let mounted = true;
+    const fetchIcon = async () => {
+      const url = await fetchTokenIcon(token, token.chainId);
+      if (mounted) setIconUrl(url);
+    };
+    fetchIcon();
+    return () => { mounted = false; };
+  }, [token]);
+
+  return (
+    <img 
+      src={iconUrl} 
+      alt={token.symbol} 
+      style={{ width: '28px', height: '28px', borderRadius: '50%' }}
+      onError={(e) => {
+        (e.target as HTMLImageElement).src = getPlaceholderImage();
+      }} 
+    />
+  );
+}
+
 export function TokenInfoSidebar({
   fromToken,
   toToken,
@@ -367,14 +392,7 @@ export function TokenInfoSidebar({
           {fromToken && (
             <div className="token-info-row">
               <div className="token-info-header">
-                <img 
-                  src={getTokenLogoUrl(fromToken, fromToken.chainId || 1)} 
-                  alt={fromToken.symbol} 
-                  style={{ width: '28px', height: '28px', borderRadius: '50%' }}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = getPlaceholderImage();
-                  }} 
-                />
+                <TokenIcon token={fromToken} />
                 <div>
                   <div className="token-symbol">{fromToken.symbol}</div>
                   <div className="token-name">{fromToken.name}</div>
@@ -394,14 +412,7 @@ export function TokenInfoSidebar({
           {toToken && (
             <div className="token-info-row">
               <div className="token-info-header">
-                <img 
-                  src={getTokenLogoUrl(toToken, toToken.chainId || 1)} 
-                  alt={toToken.symbol} 
-                  style={{ width: '28px', height: '28px', borderRadius: '50%' }}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = getPlaceholderImage();
-                  }} 
-                />
+                <TokenIcon token={toToken} />
                 <div>
                   <div className="token-symbol">{toToken.symbol}</div>
                   <div className="token-name">{toToken.name}</div>
