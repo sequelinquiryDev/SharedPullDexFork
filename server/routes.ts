@@ -585,10 +585,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           });
           
           const analyticsKey = `analytics-${key}`;
-          const aSub = analyticsSubscriptions.get(analyticsKey);
-          if (aSub?.ttlTimer) {
-            clearTimeout(aSub.ttlTimer);
-            aSub.ttlTimer = undefined;
+          const aSubExisting = analyticsSubscriptions.get(analyticsKey);
+          if (aSubExisting?.ttlTimer) {
+            clearTimeout(aSubExisting.ttlTimer);
+            aSubExisting.ttlTimer = undefined;
           }
 
           if (!sessionAnalyticsSubscriptions.has(analyticsKey)) {
@@ -599,9 +599,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             analyticsSubscriptions.get(analyticsKey)!.clients.add(ws);
           }
           
-          const aSub = analyticsSubscriptions.get(analyticsKey);
-          if (aSub) {
-            aSub.lastSeen = Date.now();
+          const aSubFinal = analyticsSubscriptions.get(analyticsKey);
+          if (aSubFinal) {
+            aSubFinal.lastSeen = Date.now();
           }
           
           // Send initial analytics data to client
