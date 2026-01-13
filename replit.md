@@ -12,7 +12,7 @@
 
 ---
 
-## 🏗 SYSTEM ARCHITECTURE (Dr. Ahmed Mohamed)
+## 🏗 SYSTEM ARCHITECTURE (Dr. Ahmed Mohamed  )
 
 ### 1. WebSocket Sectors
 - **Price Stream**: 8-second broadcasts with shared subscription de-duplication.
