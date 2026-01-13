@@ -536,11 +536,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const sessionSubscriptions = new Set<string>();           // Track all tokens client ever subscribed to
     const sessionAnalyticsSubscriptions = new Set<string>();  // Track all analytics subscriptions in session
     
+    console.log(`[WS] New client connected. Total clients: ${tokenRefreshClients.size}`);
+    
     ws.on('message', async (msg) => {
       try {
         const data = JSON.parse(msg.toString());
         if (data.type === 'subscribe') {
           const key = `${data.chainId}-${data.address.toLowerCase()}`;
+          
+          // Log subscription for debugging chain-switching issues
+          console.log(`[WS] Client subscribing to ${key} | Session already has: ${sessionSubscriptions.has(key)}`);
           
           // Clear any existing TTL timer when client subscribes/re-subscribes
           const sub = activeSubscriptions.get(key);
@@ -550,16 +555,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             console.log(`[WS] TTL cleared for ${key} due to re-subscription`);
           }
 
+          // Always ensure client is in the subscription set, even if already subscribed
+          // This handles BRG mode where user might switch chains and re-select the same token
           if (!sessionSubscriptions.has(key)) {
             sessionSubscriptions.add(key);
             subscribeToken(data.chainId, data.address);
-            
-            if (!activeSubscriptions.has(key)) {
-              activeSubscriptions.set(key, { clients: new Set(), lastSeen: Date.now() });
-            }
-            // Ensure client is added to global active subscribers
-            activeSubscriptions.get(key)!.clients.add(ws);
           }
+          
+          // Always ensure subscription exists and client is added
+          if (!activeSubscriptions.has(key)) {
+            activeSubscriptions.set(key, { clients: new Set(), lastSeen: Date.now() });
+          }
+          // Ensure client is added to global active subscribers
+          activeSubscriptions.get(key)!.clients.add(ws);
           
           // CRITICAL: Update lastSeen to prevent cleanup while client is active
           const activeSub = activeSubscriptions.get(key);
@@ -573,9 +581,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
             // Send cached price immediately without blocking
             try {
               ws.send(JSON.stringify({ type: 'price', data: cachedPrice, address: data.address, chainId: data.chainId }));
+              console.log(`[WS] ✓ Sent cached price for ${key}`);
             } catch (err) {
               console.error(`[WS] Error sending cached price:`, err);
             }
+          } else {
+            console.log(`[WS] No cached price for ${key}, fetching fresh`);
           }
           
           // Fetch fresh price in background (doesn't block subscription)
@@ -597,6 +608,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               analyticsSubscriptions.set(analyticsKey, { clients: new Set(), lastSeen: Date.now() });
             }
             analyticsSubscriptions.get(analyticsKey)!.clients.add(ws);
+          } else {
+            // Re-add client even if already in session (handles reconnections)
+            if (!analyticsSubscriptions.has(analyticsKey)) {
+              analyticsSubscriptions.set(analyticsKey, { clients: new Set(), lastSeen: Date.now() });
+            }
+            analyticsSubscriptions.get(analyticsKey)!.clients.add(ws);
           }
           
           const aSubFinal = analyticsSubscriptions.get(analyticsKey);
@@ -609,6 +626,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           const analytics = await getOnChainAnalytics(data.address, data.chainId);
           if (analytics && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'analytics', data: analytics, address: data.address, chainId: data.chainId }));
+            console.log(`[WS] ✓ Sent analytics for ${key}`);
           }
         } else if (data.type === 'unsubscribe') {
           const key = `${data.chainId}-${data.address.toLowerCase()}`;
