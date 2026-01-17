@@ -185,19 +185,26 @@ async function fetchTokenPriceFromV3(
   if (!v3) return null;
 
   const config = CHAIN_CONFIG[chainId];
-  const STABLES = [config.usdcAddr, config.usdtAddr, config.wethAddr];
+  // CRITICAL FIX: Normalize all addresses to lowercase for consistent comparisons
+  const STABLES = [
+    config.usdcAddr.toLowerCase(), 
+    config.usdtAddr.toLowerCase(), 
+    config.wethAddr.toLowerCase()
+  ];
   
-  // NATIVE token identification (POL/MATIC on Polygon or ETH on Ethereum)
-  const isNative = (chainId === 137 && (tokenAddr.toLowerCase() === "0x0000000000000000000000000000000000001010" || tokenAddr.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")) ||
-                   (chainId === 1 && (tokenAddr.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" || tokenAddr.toLowerCase() === "0x0000000000000000000000000000000000000000"));
+  // NATIVE token identification (POL/MATIC on Polygon or ETH on Ethereum) - all lowercase
+  const normalizedToken = tokenAddr.toLowerCase();
+  const isNative = (chainId === 137 && (normalizedToken === "0x0000000000000000000000000000000000001010" || normalizedToken === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")) ||
+                   (chainId === 1 && (normalizedToken === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" || normalizedToken === "0x0000000000000000000000000000000000000000"));
 
   try {
     const decimals = isNative ? 18 : await new ethers.Contract(tokenAddr, ERC20_ABI, provider).decimals().catch(() => 18);
     const amountIn = ethers.utils.parseUnits("1", decimals);
 
     for (const stable of STABLES) {
-      if (tokenAddr.toLowerCase() === stable.toLowerCase()) {
-        if (stable.toLowerCase() === config.usdcAddr.toLowerCase() || stable.toLowerCase() === config.usdtAddr.toLowerCase()) return 1.0;
+      // All addresses normalized to lowercase
+      if (normalizedToken === stable) {
+        if (stable === config.usdcAddr.toLowerCase() || stable === config.usdtAddr.toLowerCase()) return 1.0;
         continue;
       }
       
@@ -207,8 +214,11 @@ async function fetchTokenPriceFromV3(
       for (const fee of v3.fees) {
         try {
           const quoter = new ethers.Contract(v3.quoter, V3_QUOTER_ABI, provider);
+          // getPair requires checksummed addresses for smart contract calls
+          const checksumToken = ethers.utils.getAddress(tokenAddr);
+          const checksumStable = ethers.utils.getAddress(stable);
           const poolAddress = await new ethers.Contract(v3.factory, V3_FACTORY_ABI, provider)
-            .getPool(tokenAddr, stable, fee);
+            .getPool(checksumToken, checksumStable, fee);
           
           if (poolAddress === ethers.constants.AddressZero) continue;
 
@@ -218,8 +228,8 @@ async function fetchTokenPriceFromV3(
 
           if (poolBalance.gt(maxFeeLiquidity)) {
             const amountOut = await quoter.callStatic.quoteExactInputSingle(
-              tokenAddr,
-              stable,
+              checksumToken,
+              checksumStable,
               fee,
               amountIn,
               0
@@ -229,11 +239,12 @@ async function fetchTokenPriceFromV3(
               const stableDecimals = await stableContract.decimals();
               let price = parseFloat(ethers.utils.formatUnits(amountOut, stableDecimals));
               
-              if (stable.toLowerCase() === config.wethAddr.toLowerCase()) {
+              // All comparisons use lowercase normalized addresses
+              if (stable === config.wethAddr.toLowerCase()) {
                 // Fixed: Check tokenAddr to avoid recursive WETH price lookup when pricing WETH itself
-                if (tokenAddr.toLowerCase() !== config.wethAddr.toLowerCase() && 
-                    tokenAddr.toLowerCase() !== "0x0000000000000000000000000000000000001010" && 
-                    tokenAddr.toLowerCase() !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
+                if (normalizedToken !== config.wethAddr.toLowerCase() && 
+                    normalizedToken !== "0x0000000000000000000000000000000000001010" && 
+                    normalizedToken !== "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee") {
                   const wethPrice = await fetchTokenPriceFromDex(config.wethAddr, chainId, true);
                   if (wethPrice) price *= wethPrice;
                 }
@@ -500,7 +511,14 @@ async function fetchTokenPriceFromDex(
                 }
               }
             } catch (e) {
-              console.debug(`[OnChainFetcher] Error with pair for ${tokenAddr}:`, e instanceof Error ? e.message : e);
+              // CRITICAL FIX: Better error logging with context
+              const errorMsg = e instanceof Error ? e.message : String(e);
+              // Only log at debug level for expected errors (no pool), error level for unexpected ones
+              if (errorMsg.includes('CALL_EXCEPTION') || errorMsg.includes('contract')) {
+                console.debug(`[OnChainFetcher] No pool found for pair ${tokenAddr}-${targetStable}:`, errorMsg);
+              } else {
+                console.error(`[OnChainFetcher] Unexpected error with pair ${tokenAddr}-${targetStable}:`, errorMsg);
+              }
               continue;
             }
           }
@@ -510,18 +528,28 @@ async function fetchTokenPriceFromDex(
             break;
           }
         } catch (e) {
-          console.debug(`[OnChainFetcher] Error with factory ${factoryAddr}:`, e instanceof Error ? e.message : e);
+          const errorMsg = e instanceof Error ? e.message : String(e);
+          console.debug(`[OnChainFetcher] Error with factory ${factoryAddr}:`, errorMsg);
           continue;
         }
       }
       if (bestPrice) return bestPrice;
     } catch (e) {
-      console.error(`[OnChainFetcher] Major error for ${tokenAddr} on chain ${chainId}:`, e instanceof Error ? e.message : e);
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[OnChainFetcher] Major error for ${tokenAddr} on chain ${chainId}:`, errorMsg, e instanceof Error ? e.stack : '');
     }
     retries--;
-    if (retries > 0) await new Promise(resolve => setTimeout(resolve, 1000));
+    if (retries > 0) {
+      console.log(`[OnChainFetcher] Retrying price fetch for ${tokenAddr} (${retries} retries left)...`);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
   }
-  console.warn(`[OnChainFetcher] Could not fetch price for ${tokenAddr} on chain ${chainId}`);
+  // CRITICAL FIX: More descriptive error message for tokens without pools
+  console.error(
+    `[OnChainFetcher] Failed to fetch price for ${tokenAddr} on chain ${chainId} after all retries. ` +
+    `Possible causes: (1) Token has no liquidity pools in configured DEXes, ` +
+    `(2) All RPC endpoints failed, (3) Invalid token address.`
+  );
   return null;
 }
 
@@ -596,8 +624,10 @@ export async function fetchOnChainData(
       const price = await fetchTokenPriceFromDex(address, chainId);
 
       if (price === null || price <= 0) {
-        console.warn(
-          `[OnChainFetcher] Could not fetch price for ${address} on chain ${chainId}`
+        // CRITICAL FIX: Better error messaging for tokens without pools
+        console.error(
+          `[OnChainFetcher] No liquidity pool found for token ${address} on chain ${chainId}. ` +
+          `This token may not have liquidity in configured DEXes or the address may be invalid.`
         );
         return null;
       }
