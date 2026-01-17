@@ -153,5 +153,5 @@ All changes are backwards compatible:
 - No new dependencies required
 
 ## Credits
-Implementation by GitHub Copilot AI
-Addressing issue: Fix intermittent icon failures during heavy search/toggle usage
+Implementation by the Ahmed-nol-DeX development team
+Task: Fix intermittent icon failures during heavy search/toggle usage
