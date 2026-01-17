@@ -157,10 +157,11 @@ export function getFactoryPriority(chainId: number): {
   return { primary: [], fallback: [] };
 }
 
-// Run cleanup every 6 hours
+// CRITICAL FIX: Run cleanup more frequently (every 1 hour instead of 6 hours)
+// This ensures stale pools are removed faster after updates
 setInterval(() => {
   cleanupOldPoolCache();
-}, 6 * 60 * 60 * 1000);
+}, 60 * 60 * 1000); // 1 hour
 
 /**
  * Clear entire pool cache immediately

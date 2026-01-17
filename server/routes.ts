@@ -734,6 +734,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // Batch price fetch endpoint - reduces RPC hits by fetching multiple tokens at once
+  // CRITICAL FIX: Add concurrency limit to prevent RPC throttling
   app.post("/api/prices/batch", async (req, res) => {
     const { tokens } = req.body;
     if (!Array.isArray(tokens) || tokens.length === 0) {
@@ -741,13 +742,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     const results: Record<string, OnChainPrice | null> = {};
-    const promises = tokens.map(async (token: any) => {
-      const price = await fetchPriceAggregated(token.address, token.chainId);
-      const key = `${token.chainId}-${token.address.toLowerCase()}`;
-      results[key] = price;
-    });
+    
+    // CRITICAL FIX: Limit concurrency to 10 parallel requests to prevent RPC overload
+    const CONCURRENCY_LIMIT = 10;
+    for (let i = 0; i < tokens.length; i += CONCURRENCY_LIMIT) {
+      const batch = tokens.slice(i, i + CONCURRENCY_LIMIT);
+      const promises = batch.map(async (token: any) => {
+        const price = await fetchPriceAggregated(token.address, token.chainId);
+        const key = `${token.chainId}-${token.address.toLowerCase()}`;
+        results[key] = price;
+      });
+      
+      await Promise.all(promises);
+    }
 
-    await Promise.all(promises);
     res.json(results);
   });
 

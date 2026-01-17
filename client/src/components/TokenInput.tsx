@@ -292,20 +292,27 @@ export function TokenInput({
     runIconFetching();
   }, [suggestions, chainId, chain]);
 
-  // Watcher for dropdown tokens visibility and selection
+  // CRITICAL FIX: Separate subscription management from dropdown visibility
+  // This prevents race conditions where subscriptions are unsubscribed while async operations complete
   useEffect(() => {
     if (!showSuggestions || suggestions.length === 0) {
-      // Only unsubscribe tokens that are NOT currently selected
-      unsubscribersRef.current.forEach((unsub, key) => {
-        if (selectedToken) {
-          const t = selectedToken as ExtendedToken;
-          const selectedKey = `${t.chainId || chainId}-${selectedToken.address.toLowerCase()}`;
-          if (key === selectedKey) return;
-        }
-        unsub();
-        unsubscribersRef.current.delete(key);
-      });
-      return;
+      // CRITICAL FIX: Don't immediately unsubscribe - wait for dropdown to fully close
+      // Keep subscriptions alive for selected token and recently viewed tokens
+      const delayedCleanup = setTimeout(() => {
+        unsubscribersRef.current.forEach((unsub, key) => {
+          if (selectedToken) {
+            const t = selectedToken as ExtendedToken;
+            const selectedKey = `${t.chainId || chainId}-${selectedToken.address.toLowerCase()}`;
+            // CRITICAL: Never unsubscribe the selected token
+            if (key === selectedKey) return;
+          }
+          // Only unsubscribe after dropdown has been closed for 500ms
+          unsub();
+          unsubscribersRef.current.delete(key);
+        });
+      }, 500); // Give time for dropdown animation and any pending updates
+      
+      return () => clearTimeout(delayedCleanup);
     }
 
     connectPriceService();
@@ -320,31 +327,47 @@ export function TokenInput({
       currentTokenKeys.add(`${t.chainId || chainId}-${selectedToken.address.toLowerCase()}`);
     }
 
-    // Parallelized subscription management
+    // CRITICAL FIX: Unsubscribe only tokens that are truly no longer needed
     const toUnsubscribe: string[] = [];
     unsubscribersRef.current.forEach((_, key) => {
       if (!currentTokenKeys.has(key)) toUnsubscribe.push(key);
     });
 
     toUnsubscribe.forEach(key => {
-      unsubscribersRef.current.get(key)?.();
-      unsubscribersRef.current.delete(key);
+      const unsub = unsubscribersRef.current.get(key);
+      if (unsub) {
+        unsub();
+        unsubscribersRef.current.delete(key);
+      }
     });
 
+    // CRITICAL FIX: Subscribe synchronously first, then enhance with async data
     suggestions.forEach(({ token }) => {
       const t = token as ExtendedToken;
       const tokenChainId = t.chainId || chainId;
       const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
       
       if (!unsubscribersRef.current.has(subKey)) {
-        // Parallelize initial price fetch and socket subscription
-        Promise.all([
-          fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`)
-            .then(res => res.json())
-            .catch(() => null),
-          new Promise<() => void>((resolve) => {
-            const unsub = subscribeToPrice(token.address, tokenChainId, (priceData) => {
-              if (!priceData || priceData.price === undefined) return;
+        // CRITICAL FIX: Store subscription immediately (synchronously) to prevent race conditions
+        const unsub = subscribeToPrice(token.address, tokenChainId, (priceData) => {
+          if (!priceData || priceData.price === undefined) return;
+          setSuggestions(prev => prev.map(item => {
+            const itemChainId = (item.token as ExtendedToken).chainId || chainId;
+            if (item.token.address.toLowerCase() === token.address.toLowerCase() && itemChainId === tokenChainId) {
+              return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
+            }
+            return item;
+          }));
+        });
+        
+        // Store subscription IMMEDIATELY (not after async Promise)
+        unsubscribersRef.current.set(subKey, unsub);
+        
+        // Fetch initial price asynchronously (doesn't affect subscription storage)
+        fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`)
+          .then(res => res.json())
+          .then(priceData => {
+            if (priceData && priceData.price !== undefined) {
               setSuggestions(prev => prev.map(item => {
                 const itemChainId = (item.token as ExtendedToken).chainId || chainId;
                 if (item.token.address.toLowerCase() === token.address.toLowerCase() && itemChainId === tokenChainId) {
@@ -352,21 +375,11 @@ export function TokenInput({
                 }
                 return item;
               }));
-            });
-            resolve(unsub);
+            }
           })
-        ]).then(([priceData, unsubscribe]) => {
-          if (priceData && priceData.price !== undefined) {
-            setSuggestions(prev => prev.map(item => {
-              const itemChainId = (item.token as ExtendedToken).chainId || chainId;
-              if (item.token.address.toLowerCase() === token.address.toLowerCase() && itemChainId === tokenChainId) {
-                return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
-              }
-              return item;
-            }));
-          }
-          unsubscribersRef.current.set(subKey, unsubscribe);
-        });
+          .catch(() => {
+            // Silently fail - subscription will update when server broadcasts
+          });
       }
     });
   }, [showSuggestions, suggestions, selectedToken, chainId]);

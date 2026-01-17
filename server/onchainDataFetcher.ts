@@ -69,18 +69,39 @@ const CHAIN_CONFIG: Record<
   },
 };
 
-// Helper to get provider with fallback
+// Helper to get provider with fallback and timeout
 async function getProvider(chainId: number): Promise<ethers.providers.JsonRpcProvider> {
   const config = CHAIN_CONFIG[chainId];
   if (!config) throw new Error(`No config for chain ${chainId}`);
   
-  for (const url of config.rpc) {
+  for (let i = 0; i < config.rpc.length; i++) {
+    const url = config.rpc[i];
     try {
       const provider = new ethers.providers.JsonRpcProvider(url);
-      await provider.getNetwork();
+      
+      // CRITICAL FIX: Add timeout to network check to prevent hanging
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('RPC timeout')), 5000)
+      );
+      
+      await Promise.race([provider.getNetwork(), timeoutPromise]);
       return provider;
     } catch (e) {
-      console.warn(`[OnChainFetcher] RPC failed: ${url}. Trying next...`);
+      const isLastRpc = i === config.rpc.length - 1;
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      
+      // CRITICAL FIX: Better error logging with context
+      if (isLastRpc) {
+        console.error(`[OnChainFetcher] All RPCs failed for chain ${chainId}. Last error from ${url}:`, errorMsg);
+      } else {
+        console.warn(`[OnChainFetcher] RPC failed: ${url} (${errorMsg}). Trying next...`);
+      }
+      
+      // CRITICAL FIX: Add exponential backoff before trying next RPC (except on last one)
+      if (!isLastRpc && errorMsg.includes('429')) {
+        // Rate limit detected, wait before trying next RPC
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+      }
     }
   }
   throw new Error(`All RPCs failed for chain ${chainId}`);
@@ -270,14 +291,19 @@ async function fetchTokenPriceFromDex(
   while (retries > 0) {
     try {
       const provider = await getProvider(chainId);
-      let checksumAddress: string;
+      
+      // CRITICAL FIX: Normalize address to lowercase for consistent comparisons
+      // All cache keys and address comparisons use lowercase to avoid checksum mismatches
+      let normalizedAddress: string;
       try {
-        checksumAddress = ethers.utils.getAddress(effectiveTokenAddr);
+        // First validate the address is valid, then normalize to lowercase
+        const checksumAddress = ethers.utils.getAddress(effectiveTokenAddr);
+        normalizedAddress = checksumAddress.toLowerCase();
       } catch (e) {
-        console.warn(`[OnChainFetcher] Invalid address format: ${effectiveTokenAddr}`);
+        console.error(`[OnChainFetcher] Invalid address format for ${effectiveTokenAddr}:`, e instanceof Error ? e.message : e);
         return null;
       }
-      const tokenAddress = checksumAddress;
+      const tokenAddress = normalizedAddress;
 
       // Try Uniswap V3 first as it often has better liquidity for major tokens
       // Always try V3 for native coins since they usually have best liquidity there
@@ -294,6 +320,7 @@ async function fetchTokenPriceFromDex(
       }
 
       // Try all V2-style factories
+      // CRITICAL FIX: Normalize all stablecoin addresses to lowercase for consistent comparisons
       const STABLECOINS = [
         config.usdcAddr,
         config.usdtAddr,
@@ -311,8 +338,10 @@ async function fetchTokenPriceFromDex(
         "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619", // WETH Polygon
       ].map(addr => {
         try {
-          return ethers.utils.getAddress(addr);
+          // Validate and normalize to lowercase
+          return ethers.utils.getAddress(addr).toLowerCase();
         } catch (e) {
+          console.error(`[OnChainFetcher] Invalid stablecoin address: ${addr}`);
           return null;
         }
       }).filter((addr): addr is string => !!addr);
@@ -333,22 +362,16 @@ async function fetchTokenPriceFromDex(
           const factory = new ethers.Contract(factoryAddr, FACTORY_ABI, provider);
           
           for (const targetStable of STABLECOINS) {
-            if (tokenAddress.toLowerCase() === targetStable.toLowerCase()) continue;
-
-            let checksumStable: string;
-            try {
-              checksumStable = ethers.utils.getAddress(targetStable);
-            } catch (e) {
-              continue;
-            }
+            // All addresses now normalized to lowercase, simple comparison
+            if (tokenAddress === targetStable) continue;
 
             // CRITICAL: Ensure stablecoin belongs to the current chain's config or is a cross-chain fallback
-            const isChainStable = targetStable.toLowerCase() === config.usdcAddr.toLowerCase() || 
-                                targetStable.toLowerCase() === config.usdtAddr.toLowerCase() ||
-                                targetStable.toLowerCase() === config.wethAddr.toLowerCase() ||
-                                (config.wmaticAddr && targetStable.toLowerCase() === config.wmaticAddr.toLowerCase());
+            const isChainStable = targetStable === config.usdcAddr.toLowerCase() || 
+                                targetStable === config.usdtAddr.toLowerCase() ||
+                                targetStable === config.wethAddr.toLowerCase() ||
+                                (config.wmaticAddr && targetStable === config.wmaticAddr.toLowerCase());
             
-            // Known valid stables for this chain
+            // Known valid stables for this chain (all lowercase)
             const polyStables = [
               "0x2791bca1f2de4661ed88a30c99a7a9449aa84174", // USDC
               "0xc2132d05d31c914a87c6611c10748aeb04b58e8f", // USDT
@@ -368,12 +391,12 @@ async function fetchTokenPriceFromDex(
 
             // If not a primary chain stable, only try if it's a known liquid fallback for this chain
             if (!isChainStable) {
-              if (chainId === 137 && !polyStables.includes(targetStable.toLowerCase())) continue;
-              if (chainId === 1 && !ethStables.includes(targetStable.toLowerCase())) continue;
+              if (chainId === 137 && !polyStables.includes(targetStable)) continue;
+              if (chainId === 1 && !ethStables.includes(targetStable)) continue;
             }
 
-            // Check if we have a cached pool for this pair
-            const cachedPool = getCachedPool(tokenAddress, checksumStable, chainId);
+            // Check if we have a cached pool for this pair (all lowercase)
+            const cachedPool = getCachedPool(tokenAddress, targetStable, chainId);
             
             try {
               let pairAddr: string;
@@ -382,9 +405,11 @@ async function fetchTokenPriceFromDex(
                 // Use cached pool if available
                 pairAddr = cachedPool.poolAddress;
               } else {
-                // Discover new pool
+                // Discover new pool - getPair requires checksummed addresses for smart contract calls
                 try {
-                  pairAddr = await factory.getPair(tokenAddress, checksumStable);
+                  const checksumToken = ethers.utils.getAddress(tokenAddress);
+                  const checksumStable = ethers.utils.getAddress(targetStable);
+                  pairAddr = await factory.getPair(checksumToken, checksumStable);
                 } catch (e) {
                   continue;
                 }
@@ -395,16 +420,20 @@ async function fetchTokenPriceFromDex(
               const pair = new ethers.Contract(pairAddr, PAIR_ABI, provider);
               const [reserve0, reserve1] = await pair.getReserves();
               
-              // CRITICAL: Validate reserves exist before using cached pool
+              // CRITICAL FIX: Validate reserves exist and clear cache for dead pools
               if (reserve0.isZero() || reserve1.isZero()) {
                 if (cachedPool) {
-                  console.warn(`[OnChainFetcher] Cached pool ${pairAddr} has zero reserves, skipping`);
+                  console.warn(`[OnChainFetcher] Cached pool ${pairAddr} has zero reserves, clearing from cache`);
+                  // CRITICAL: Clear the dead pool from cache immediately
+                  const { clearPoolCacheFor } = await import("./poolCacheManager");
+                  clearPoolCacheFor(tokenAddress, targetStable, chainId);
                 }
                 continue;
               }
 
               const token0 = await pair.token0();
-              const isToken0 = token0.toLowerCase() === tokenAddress.toLowerCase();
+              // All addresses normalized to lowercase for comparison
+              const isToken0 = token0.toLowerCase() === tokenAddress;
               const tokenReserve = isToken0 ? reserve0 : reserve1;
               const stableReserve = isToken0 ? reserve1 : reserve0;
 
@@ -424,12 +453,12 @@ async function fetchTokenPriceFromDex(
                 const stableContract = new ethers.Contract(targetStable, ERC20_ABI, provider);
                 stableDecimals = await stableContract.decimals();
               } catch (e) {
-                // Fallback decimals for known stables
-                if (targetStable.toLowerCase() === "0x2791bca1f2de4661ed88a30c99a7a9449aa84174" ||
-                    targetStable.toLowerCase() === "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48") {
+                // Fallback decimals for known stables (all lowercase addresses)
+                if (targetStable === "0x2791bca1f2de4661ed88a30c99a7a9449aa84174" ||
+                    targetStable === "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48") {
                   stableDecimals = 6; // USDC
-                } else if (targetStable.toLowerCase() === "0xdac17f958d2ee523a2206206994597c13d831ec7" ||
-                           targetStable.toLowerCase() === "0xc2132d05d31c914a87c6611c10748aeb04b58e8f") {
+                } else if (targetStable === "0xdac17f958d2ee523a2206206994597c13d831ec7" ||
+                           targetStable === "0xc2132d05d31c914a87c6611c10748aeb04b58e8f") {
                   stableDecimals = 6; // USDT
                 }
               }
@@ -444,12 +473,12 @@ async function fetchTokenPriceFromDex(
               
               let priceInStable = stableUnits / tokenUnits;
 
-              // If we paired with WETH, we need to convert WETH price to USDC
-              const needsWethConversion = targetStable.toLowerCase() === config.wethAddr.toLowerCase() || 
-                    targetStable.toLowerCase() === "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619".toLowerCase() ||
-                    targetStable.toLowerCase() === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2".toLowerCase();
+              // If we paired with WETH, we need to convert WETH price to USDC (all lowercase)
+              const needsWethConversion = targetStable === config.wethAddr.toLowerCase() || 
+                    targetStable === "0x7ceb23fd6bc0add59e62ac25578270cff1b9f619" ||
+                    targetStable === "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
               
-              if (needsWethConversion && tokenAddress.toLowerCase() !== config.wethAddr.toLowerCase()) {
+              if (needsWethConversion && tokenAddress !== config.wethAddr.toLowerCase()) {
                 const wethPrice = await fetchTokenPriceFromDex(targetStable, chainId, true);
                 if (wethPrice) {
                   priceInStable *= wethPrice;
