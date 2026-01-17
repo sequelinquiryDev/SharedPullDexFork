@@ -1,11 +1,12 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, getTokenLogoUrl, getIconCacheKey } from '@/lib/tokenService';
+import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, getCgStatsMap, getTokenByAddress, getTokenLogoUrl, getIconCacheKey, fetchTokenIcon } from '@/lib/tokenService';
 import { formatUSD, low, isAddress, type OnChainPrice } from '@/lib/config';
 import { useChain } from '@/lib/chainContext';
 import { useTokenSelection } from '@/lib/tokenSelectionContext';
 import { useTypewriter } from '@/hooks/useTypewriter';
 import { subscribeToPrice, connectPriceService } from '@/lib/priceService';
+import { iconCache } from '@/lib/iconCache';
 
 interface ExtendedToken extends Token {
   chainId?: number;
@@ -33,34 +34,6 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
     : [`Search ${chain} tokens...`, `Search contract address...`];
   const typewriterPlaceholder = useTypewriter(placeholderTexts, 60, 30, 900);
 
-  const [suggestionIcons, setSuggestionIcons] = useState<Map<string, string>>(new Map());
-
-  // Fetch icons for all suggestions
-  useEffect(() => {
-    if (suggestions.length === 0) return;
-
-    console.log(`[TokenSearchBar] Icon effect triggered with ${suggestions.length} suggestions`);
-    const newIcons = new Map(suggestionIcons);
-    let changed = false;
-    
-    suggestions.forEach(({ token }) => {
-      const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
-      const cacheKey = getIconCacheKey(token.address, tokenChainId);
-      
-      if (!newIcons.has(cacheKey)) {
-        const iconUrl = getTokenLogoUrl(token, tokenChainId);
-        console.log(`[TokenSearchBar] Icon Cache SET: ${cacheKey} => ${iconUrl}`);
-        newIcons.set(cacheKey, iconUrl);
-        changed = true;
-      }
-    });
-    
-    if (changed) {
-      console.log(`[TokenSearchBar] Updating suggestion icons with ${newIcons.size} total icons`);
-      setSuggestionIcons(newIcons);
-    }
-  }, [suggestions, chain]);
-
   const handleSearch = useCallback(async (query: string) => {
     // BRG mode: search both chains; otherwise single chain
     const chainIds = chain === 'BRG' ? [1, 137] : [chain === 'ETH' ? 1 : 137];
@@ -85,8 +58,15 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
           });
         });
       }
-      setSuggestions(allTokens.slice(0, 15));
+      const results = allTokens.slice(0, 15);
+      setSuggestions(results);
       setShowSuggestions(true);
+      
+      // Prefetch icons for suggestions in background
+      iconCache.prefetchIcons(results.map(({ token }) => ({
+        address: token.address,
+        chainId: (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137)
+      })));
       return;
     }
 
@@ -143,8 +123,15 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
         const volB = (b.stats?.volume24h || 0) * (b.stats?.price || 1);
         return volB - volA;
       });
-      setSuggestions([...top5, ...rest].slice(0, 15));
+      const results = [...top5, ...rest].slice(0, 15);
+      setSuggestions(results);
       setShowSuggestions(true);
+      
+      // Prefetch icons for suggestions in background
+      iconCache.prefetchIcons(results.map(({ token }) => ({
+        address: token.address,
+        chainId: (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137)
+      })));
     } finally {
       setLoading(false);
     }
@@ -372,8 +359,6 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
               const tokenChainId = (token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
               const iconUrl = getTokenLogoUrl(token, tokenChainId);
               
-              console.log(`[TokenSearchBar] Rendering ${token.symbol} with iconUrl: ${iconUrl}`);
-              
               const chainLabel = tokenChainId === 1 ? 'ETH' : tokenChainId === 137 ? 'POL' : null;
               return (
                 <div
@@ -388,7 +373,6 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
                       alt={token.symbol}
                       style={{ width: '28px', height: '28px', borderRadius: '50%' }}
                       onError={(e) => {
-                        console.log(`[TokenSearchBar] Image failed to load: ${(e.target as HTMLImageElement).src}`);
                         (e.target as HTMLImageElement).src = getPlaceholderImage();
                       }}
                     />

@@ -3,6 +3,7 @@ import { Token, TokenStats, searchTokens, getTopTokens, getPlaceholderImage, get
 import { formatUSD, low, isAddress, type OnChainPrice } from '@/lib/config';
 import { useChain } from '@/lib/chainContext';
 import { subscribeToPrice, connectPriceService } from '@/lib/priceService';
+import { iconCache } from '@/lib/iconCache';
 
 interface ExtendedToken extends Token {
   chainId?: number;
@@ -36,8 +37,6 @@ export function TokenInput({
   const [suggestions, setSuggestions] = useState<{ token: ExtendedToken & { currentPrice?: number; priceChange24h?: number }; stats: TokenStats | null; price: number | null }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [selectedTokenIcon, setSelectedTokenIcon] = useState<string>('');
-  const [suggestionIcons, setSuggestionIcons] = useState<Map<string, string>>(new Map());
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,7 +44,6 @@ export function TokenInput({
   const lastSelectedAddressRef = useRef<string>('');
   const firstClickRef = useRef<boolean>(true);
   const unsubscribersRef = useRef<Map<string, () => void>>(new Map());
-  const iconCacheRef = useRef<Map<string, string>>(new Map());
 
   // Whitelist of real stablecoin addresses on major chains
   const STABLECOIN_WHITELIST = {
@@ -98,8 +96,15 @@ export function TokenInput({
         console.log('[handleSearch] allTokens pre-filter:', allTokens.length, allTokens);
         const filtered = allTokens.filter(item => !isLikelyScam(item.token, allTokens, false));
         console.log('[handleSearch] allTokens post-filter:', filtered.length, filtered);
-        setSuggestions(filtered.slice(0, 15));
+        const results = filtered.slice(0, 15);
+        setSuggestions(results);
         setShowSuggestions(true);
+        
+        // Prefetch icons for suggestions in background
+        iconCache.prefetchIcons(results.map(({ token }) => ({
+          address: token.address,
+          chainId: (token as ExtendedToken).chainId || chainId
+        })));
         return;
       }
 
@@ -175,12 +180,19 @@ export function TokenInput({
       // Apply scam filter - skip filtering if address search (but always check stablecoin whitelist)
       const filtered = deduplicated.filter(item => !isLikelyScam(item.token, deduplicated, isAddress(query)));
       
-      setSuggestions(filtered.slice(0, 15));
+      const results = filtered.slice(0, 15);
+      setSuggestions(results);
       setShowSuggestions(true);
+      
+      // Prefetch icons for suggestions in background
+      iconCache.prefetchIcons(results.map(({ token }) => ({
+        address: token.address,
+        chainId: (token as ExtendedToken).chainId || chainId
+      })));
     } finally {
       setLoading(false);
     }
-  }, [chain]);
+  }, [chain, chainId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -236,61 +248,6 @@ export function TokenInput({
       setSearchQuery(selectedToken.symbol.toUpperCase());
     }
   }, [selectedToken?.address]);
-
-  // Fetch icon for selected token using cached /api/icon endpoint
-  useEffect(() => {
-    if (selectedToken) {
-      const t = selectedToken as ExtendedToken;
-      const tokenChainId = t.chainId || chainId;
-      setSelectedTokenIcon(getTokenLogoUrl(selectedToken, tokenChainId));
-    }
-  }, [selectedToken?.address, chainId, chain]);
-
-  // Parallelized icon fetching for suggestions
-  useEffect(() => {
-    if (suggestions.length === 0) return;
-
-    // Filter tokens that don't have an icon in suggestionIcons yet
-    const tokensNeedingIcons = suggestions.filter(({ token }) => {
-      const t = token as ExtendedToken;
-      const tokenChainId = t.chainId || chainId;
-      const cacheKey = getIconCacheKey(token.address, tokenChainId);
-      return !suggestionIcons.has(cacheKey);
-    });
-
-    if (tokensNeedingIcons.length === 0) return;
-
-    // Process tokens in batches of 10 as requested for "newly requested" tokens
-    const BATCH_SIZE = 10;
-    const processBatch = async (batch: any[]) => {
-      const results = await Promise.all(batch.map(async ({ token }) => {
-        const t = token as ExtendedToken;
-        const tokenChainId = t.chainId || chainId;
-        const cacheKey = getIconCacheKey(token.address, tokenChainId);
-        
-        // This hits the server cache which handles single-flight requests
-        const iconUrl = `/api/icon?address=${token.address.toLowerCase()}&chainId=${tokenChainId}&v=${Math.floor(Date.now() / 3600000)}`;
-        return { cacheKey, iconUrl };
-      }));
-
-      setSuggestionIcons(prev => {
-        const next = new Map(prev);
-        results.forEach(({ cacheKey, iconUrl }) => {
-          next.set(cacheKey, iconUrl);
-        });
-        return next;
-      });
-    };
-
-    const runIconFetching = async () => {
-      for (let i = 0; i < tokensNeedingIcons.length; i += BATCH_SIZE) {
-        const batch = tokensNeedingIcons.slice(i, i + BATCH_SIZE);
-        await processBatch(batch);
-      }
-    };
-
-    runIconFetching();
-  }, [suggestions, chainId, chain]);
 
   // CRITICAL FIX: Separate subscription management from dropdown visibility
   // This prevents race conditions where subscriptions are unsubscribed while async operations complete
@@ -435,9 +392,9 @@ export function TokenInput({
           flex: selectedToken ? undefined : 0,
         }}>
           <div className="token-icon" style={{ position: 'relative', width: '28px', height: '28px' }}>
-            {selectedTokenIcon ? (
+            {selectedToken ? (
               <img
-                src={selectedTokenIcon}
+                src={getTokenLogoUrl(selectedToken, (selectedToken as ExtendedToken).chainId || chainId)}
                 alt={selectedToken?.symbol || "Select token"}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = getPlaceholderImage();
@@ -582,8 +539,8 @@ export function TokenInput({
           ) : (
             suggestions.map(({ token, stats, price }) => {
               const tokenChainId = (token as ExtendedToken).chainId || chainId;
-              // Force fresh URL construction for each render to ensure latest v param
-              const iconUrl = `/api/icon?address=${token.address.toLowerCase()}&chainId=${tokenChainId}&v=${Math.floor(Date.now() / 3600000)}`;
+              // Use unified icon cache for consistent behavior
+              const iconUrl = getTokenLogoUrl(token, tokenChainId);
               
               const chainLabel = tokenChainId === 1 ? 'ETH' : tokenChainId === 137 ? 'POL' : null;
               return (
@@ -602,7 +559,6 @@ export function TokenInput({
                       src={iconUrl} 
                       alt={token.symbol}
                       style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
-                      key={`icon-${token.address}-${tokenChainId}-${searchQuery}`} // Add searchQuery to key to force remount on typing
                       loading="eager" // Use eager loading for suggestions
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = getPlaceholderImage();

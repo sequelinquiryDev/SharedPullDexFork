@@ -1,5 +1,6 @@
 import { config, ethereumConfig, low, fetchWithTimeout, type OnChainPrice } from './config';
 import { ethers } from 'ethers';
+import { iconCache, getIconCacheKey as getIconCacheKeyUtil } from './iconCache';
 
 export interface Token {
   address: string;
@@ -25,10 +26,6 @@ export interface TokenStats {
 const tokenListByChain = new Map<number, Token[]>();
 const tokenMapByChain = new Map<number, Map<string, Token>>();
 const statsMapByAddressChain = new Map<number, Map<string, TokenStats>>();
-const iconCache = new Map<string, { url: string; expires: number }>();
-const iconFetchingInFlight = new Map<string, Promise<string>>();
-
-const DARK_SVG_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxNCIgY3k9IjE0IiByPSIxNCIgZmlsbD0iIzJBMkEzQSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjODg4IiBmb250LXNpemU9IjEyIj4/PC90ZXh0Pjwvc3ZnPg==';
 
 function getChainConfigForId(chainId: number) {
   if (chainId === 1) return ethereumConfig;
@@ -151,7 +148,7 @@ export function getCgStatsMap(chainId: number): Map<string, TokenStats> {
 }
 
 export function getPlaceholderImage(): string {
-  return DARK_SVG_PLACEHOLDER;
+  return iconCache.getPlaceholder();
 }
 
 const priceCache = new Map<string, { price: number; timestamp: number }>();
@@ -229,56 +226,23 @@ export async function getTokenByAddress(address: string, chainId?: number): Prom
 }
 
 export function getIconCacheKey(address: string, chainId: number): string {
-  return `${chainId}-${address.toLowerCase()}`;
+  return getIconCacheKeyUtil(address, chainId);
 }
 
 export function getTokenLogoUrl(token: Token, chainId?: number): string {
   if (!token || !token.address) return getPlaceholderImage();
   const cid = chainId ?? config.chainId;
-  // Use a stable cache-busting key or just the address
-  // We want to force the browser to re-request if it fails or if we want updates
-  // But primarily we want it to hit the server cache
-  return `/api/icon?address=${token.address.toLowerCase()}&chainId=${cid}&v=${Math.floor(Date.now() / (3600000))}`; // Hourly cache bust for browser
+  // Use unified icon cache for consistent behavior
+  // This will return placeholder and trigger background fetch if not cached
+  return iconCache.getIconSync(token.address, cid);
 }
 
 export async function fetchTokenIcon(token: Token, chainId?: number): Promise<string> {
   const cid = chainId ?? config.chainId;
-  const addr = token.address.toLowerCase();
-  const cacheKey = getIconCacheKey(addr, cid);
-
-  const cached = iconCache.get(cacheKey);
-  if (cached && Date.now() < cached.expires) {
-    return cached.url;
-  }
-
-  if (iconFetchingInFlight.has(cacheKey)) {
-    return iconFetchingInFlight.get(cacheKey)!;
-  }
-
-  const promise = (async () => {
-    try {
-      const res = await fetch(`/api/icon?address=${addr}&chainId=${cid}`);
-      if (res.ok) {
-        // Since the API now returns a raw buffer, we don't expect JSON
-        // The browser can handle the raw URL from getTokenLogoUrl directly
-        // This function might be used where we NEED the base64/blob URL
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        
-        // Cache session-wide
-        iconCache.set(cacheKey, { url: url, expires: Date.now() + 7 * 24 * 60 * 60 * 1000 });
-        return url;
-      }
-    } catch (e) {
-      console.error('[TokenService] Icon fetch error:', e);
-    } finally {
-      iconFetchingInFlight.delete(cacheKey);
-    }
-    return getPlaceholderImage();
-  })();
-
-  iconFetchingInFlight.set(cacheKey, promise);
-  return promise;
+  if (!token || !token.address) return getPlaceholderImage();
+  
+  // Use unified icon cache with race condition protection
+  return iconCache.getIcon(token.address, cid);
 }
 
 export interface OnChainAnalytics {
