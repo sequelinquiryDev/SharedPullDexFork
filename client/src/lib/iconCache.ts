@@ -26,8 +26,8 @@ class IconCacheManager {
   private pendingRequests = new Map<string, PendingRequest>();
   private requestVersion = 0;
   private readonly CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
-  private readonly DAILY_MS = 24 * 60 * 60 * 1000; // 1 day in milliseconds
-  private readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour in milliseconds
+  readonly DAILY_MS = 24 * 60 * 60 * 1000; // 1 day in milliseconds
+  readonly CLEANUP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour in milliseconds
   private readonly PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjgiIGhlaWdodD0iMjgiIHZpZXdCb3g9IjAgMCAyOCAyOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxNCIgY3k9IjE0IiByPSIxNCIgZmlsbD0iIzJBMkEzQSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjODg4IiBmb250LXNpemU9IjEyIj4/PC90ZXh0Pjwvc3ZnPg==';
 
   /**
@@ -259,7 +259,7 @@ export const iconCache = new IconCacheManager();
 if (typeof window !== 'undefined') {
   setInterval(() => {
     iconCache.cleanup();
-  }, iconCache['CLEANUP_INTERVAL_MS'] || 60 * 60 * 1000);
+  }, iconCache.CLEANUP_INTERVAL_MS);
 }
 
 // Helper function to get icon cache key (for backwards compatibility)

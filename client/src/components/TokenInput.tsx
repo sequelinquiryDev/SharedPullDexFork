@@ -192,7 +192,7 @@ export function TokenInput({
     } finally {
       setLoading(false);
     }
-  }, [chain]);
+  }, [chain, chainId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
