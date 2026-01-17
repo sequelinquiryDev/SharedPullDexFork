@@ -109,13 +109,16 @@ async function fetchAndBase64Icon(address: string, chainId: number): Promise<str
   const cacheKey = `${chainId}-${address.toLowerCase()}`;
   const cached = iconCache.get(cacheKey);
   if (cached && Date.now() < cached.expires) {
+    // Cache hit - should be instant
     return cached.url;
   }
 
+  // Cache miss - will need to fetch from external sources
   if (iconFetchingInFlight.has(cacheKey)) {
     return iconFetchingInFlight.get(cacheKey)!;
   }
 
+  const fetchStartTime = Date.now();
   const promise = (async () => {
     try {
       const checksumAddr = ethers.utils.getAddress(address);
@@ -172,17 +175,26 @@ async function fetchAndBase64Icon(address: string, chainId: number): Promise<str
             const buffer = await finalRes.arrayBuffer();
             const base64 = `data:${finalRes.headers.get('content-type') || 'image/png'};base64,${Buffer.from(buffer).toString('base64')}`;
             iconCache.set(cacheKey, { url: base64, expires: Date.now() + ICON_CACHE_TTL, sourceUrl: iconUrl });
+            
+            const elapsed = Date.now() - fetchStartTime;
+            console.log(`[IconCache] Fetched ${cacheKey} from ${source} in ${elapsed}ms`);
             return base64;
           }
 
           const buffer = await response.arrayBuffer();
           const base64 = `data:${response.headers.get('content-type') || 'image/png'};base64,${Buffer.from(buffer).toString('base64')}`;
           iconCache.set(cacheKey, { url: base64, expires: Date.now() + ICON_CACHE_TTL, sourceUrl: iconUrl });
+          
+          const elapsed = Date.now() - fetchStartTime;
+          console.log(`[IconCache] Fetched ${cacheKey} from ${source} in ${elapsed}ms`);
           return base64;
         } catch (e) {
           continue;
         }
       }
+      
+      const elapsed = Date.now() - fetchStartTime;
+      console.warn(`[IconCache] Failed to fetch ${cacheKey} after trying all sources (${elapsed}ms)`);
     } catch (e) {
       console.error(`[IconCache] Global error for ${address}:`, e);
     } finally {
@@ -842,6 +854,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { address, chainId } = req.query;
     if (!address || !chainId) return res.status(400).send("Missing params");
     
+    const startTime = Date.now();
     try {
       const base64 = await fetchAndBase64Icon(address as string, Number(chainId));
       if (base64) {
@@ -853,6 +866,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         
         res.setHeader('Content-Type', contentType);
         res.setHeader('Cache-Control', 'public, max-age=604800'); // 7 days browser cache
+        
+        const elapsed = Date.now() - startTime;
+        // Log slow responses to help diagnose performance issues
+        if (elapsed > 50) {
+          console.warn(`[IconRoute] Slow response for ${chainId}-${address}: ${elapsed}ms`);
+        }
+        
         return res.send(buffer);
       } else {
         res.status(404).send("Icon not found");
