@@ -93,20 +93,20 @@ export function TokenInput({
             });
           }
         }
-        console.log('[handleSearch] allTokens pre-filter:', allTokens.length, allTokens);
-        const filtered = allTokens.filter(item => !isLikelyScam(item.token, allTokens, false));
-        console.log('[handleSearch] allTokens post-filter:', filtered.length, filtered);
-        const results = filtered.slice(0, 15);
-        setSuggestions(results);
-        setShowSuggestions(true);
-        
-        // Prefetch icons for suggestions in background
-        iconCache.prefetchIcons(results.map(({ token }) => ({
-          address: token.address,
-          chainId: (token as ExtendedToken).chainId || chainId
-        })));
-        return;
-      }
+      console.log('[handleSearch] allTokens pre-filter:', allTokens.length, allTokens);
+      const filtered = allTokens.filter(item => !isLikelyScam(item.token, allTokens, false));
+      console.log('[handleSearch] allTokens post-filter:', filtered.length, filtered);
+      const results = filtered.slice(0, 15);
+      setSuggestions(results);
+      setShowSuggestions(true);
+      
+      // Prefetch icons for suggestions in background
+      iconCache.prefetchIcons(results.map(({ token }) => ({
+        address: token.address,
+        chainId: (token as ExtendedToken).chainId || chainId
+      })));
+      return;
+    }
 
       setLoading(true);
       try {
