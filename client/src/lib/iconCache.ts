@@ -42,9 +42,8 @@ class IconCacheManager {
    * Uses daily versioning (changes once per day) instead of hourly
    */
   private getIconUrl(address: string, chainId: number): string {
-    // Use daily cache-busting instead of hourly to reduce churn
-    const dailyVersion = Math.floor(Date.now() / this.DAILY_MS);
-    return `/api/icon?address=${address.toLowerCase()}&chainId=${chainId}&v=${dailyVersion}`;
+    // Use the specific individual icon endpoint for reliable per-token caching
+    return `/api/icons/${chainId}/${address.toLowerCase()}`;
   }
 
   /**
@@ -122,8 +121,19 @@ class IconCacheManager {
         return this.PLACEHOLDER;
       }
 
+      // Convert to json and get URL
+      const data = await response.json();
+      const iconUrl = data.url;
+      
+      if (!iconUrl) {
+        return this.PLACEHOLDER;
+      }
+
       // Convert to blob URL for efficient browser caching
-      const blob = await response.blob();
+      // Since it's already a base64 from server, we can use it directly or blobify it
+      // Blobifying is better for memory management of large lists
+      const res = await fetch(iconUrl);
+      const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
 
       // Store in cache only if this request version is newer than what's in cache

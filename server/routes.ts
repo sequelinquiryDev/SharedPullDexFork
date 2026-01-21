@@ -531,6 +531,28 @@ function triggerTokenRefresh() {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   ensureTokenListExists();
+
+  // Individual token icon fetching endpoint with browser caching
+  app.get("/api/icons/:chainId/:address", async (req, res) => {
+    try {
+      const { chainId, address } = req.params;
+      const id = parseInt(chainId);
+      if (isNaN(id) || !address) {
+        return res.status(400).json({ error: "Invalid chainId or address" });
+      }
+
+      const iconUrl = await fetchAndBase64Icon(address, id);
+      if (iconUrl) {
+        res.setHeader("Cache-Control", "public, max-age=604800, stale-while-revalidate=86400");
+        return res.json({ url: iconUrl });
+      }
+
+      res.status(404).json({ error: "Icon not found" });
+    } catch (error) {
+      console.error("[Icon API] Error:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
   
   // Start background icon pre-cacher
   startBackgroundIconCacher();
