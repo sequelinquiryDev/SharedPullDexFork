@@ -233,14 +233,24 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
       const subKey = `${tokenChainId}-${token.address.toLowerCase()}`;
       
       if (!unsubscribersRef.current.has(subKey)) {
-        // Parallelize initial price fetch and socket subscription
-        Promise.all([
-          fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`)
-            .then(res => res.json())
-            .catch(() => null),
-          new Promise<() => void>((resolve) => {
-            const unsub = subscribeToPrice(token.address, tokenChainId, (priceData) => {
-              if (!priceData || priceData.price === undefined) return;
+        // Sync fetch with error handling and proper state updates
+        const unsub = subscribeToPrice(token.address, tokenChainId, (priceData) => {
+          if (!priceData || priceData.price === undefined) return;
+          setSuggestions(prev => prev.map(item => {
+            const itemChainId = (item.token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
+            if (item.token.address.toLowerCase() === token.address.toLowerCase() && itemChainId === tokenChainId) {
+              return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
+            }
+            return item;
+          }));
+        });
+        
+        unsubscribersRef.current.set(subKey, unsub);
+
+        fetch(`/api/prices/onchain?address=${token.address}&chainId=${tokenChainId}`)
+          .then(res => res.json())
+          .then(priceData => {
+            if (priceData && priceData.price !== undefined) {
               setSuggestions(prev => prev.map(item => {
                 const itemChainId = (item.token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
                 if (item.token.address.toLowerCase() === token.address.toLowerCase() && itemChainId === tokenChainId) {
@@ -248,21 +258,9 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
                 }
                 return item;
               }));
-            });
-            resolve(unsub);
+            }
           })
-        ]).then(([priceData, unsubscribe]) => {
-          if (priceData && priceData.price !== undefined) {
-            setSuggestions(prev => prev.map(item => {
-              const itemChainId = (item.token as ExtendedToken).chainId || (chain === 'ETH' ? 1 : 137);
-              if (item.token.address.toLowerCase() === token.address.toLowerCase() && itemChainId === tokenChainId) {
-                return { ...item, token: { ...item.token, currentPrice: priceData.price }, price: priceData.price };
-              }
-              return item;
-            }));
-          }
-          unsubscribersRef.current.set(subKey, unsubscribe);
-        });
+          .catch(() => {});
       }
     });
 

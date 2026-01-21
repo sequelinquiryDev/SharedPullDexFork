@@ -123,16 +123,16 @@ class IconCacheManager {
 
       // Convert to json and get URL
       const data = await response.json();
-      const iconUrl = data.url;
+      const rawUrl = data.url;
       
-      if (!iconUrl) {
+      if (!rawUrl) {
         return this.PLACEHOLDER;
       }
 
       // Convert to blob URL for efficient browser caching
       // Since it's already a base64 from server, we can use it directly or blobify it
       // Blobifying is better for memory management of large lists
-      const res = await fetch(iconUrl);
+      const res = await fetch(rawUrl);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
 
