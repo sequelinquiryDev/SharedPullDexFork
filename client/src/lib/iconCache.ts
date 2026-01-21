@@ -132,8 +132,14 @@ class IconCacheManager {
       // Convert to blob URL for efficient browser caching
       // Since it's already a base64 from server, we can use it directly or blobify it
       // Blobifying is better for memory management of large lists
-      const res = await fetch(rawUrl);
+      const res = await fetch(rawUrl, { signal });
       const blob = await res.blob();
+      
+      // CRITICAL: Check signal again after long async operation
+      if (signal.aborted) {
+        throw new Error('AbortError');
+      }
+      
       const blobUrl = URL.createObjectURL(blob);
 
       // Store in cache only if this request version is newer than what's in cache
@@ -199,14 +205,32 @@ class IconCacheManager {
    * 
    * Performance: Modern browsers can handle 50-100 parallel HTTP/2 requests efficiently.
    * With server-side caching, these requests complete in 10-20ms each.
-   * No need to artificially limit parallelism with small batches.
    */
+  private prefetchTimeoutId: number | null = null;
   async prefetchIcons(tokens: Array<{ address: string; chainId: number }>): Promise<void> {
-    // Fire all requests in parallel - browser and server will handle efficiently
-    // HTTP/2 multiplexing allows many concurrent requests over single connection
-    await Promise.allSettled(
-      tokens.map(token => this.getIcon(token.address, token.chainId))
-    );
+    // Debounce prefetching to reduce network congestion during rapid typing
+    if (this.prefetchTimeoutId) {
+      window.clearTimeout(this.prefetchTimeoutId);
+    }
+
+    this.prefetchTimeoutId = window.setTimeout(async () => {
+      // Filter out tokens already in cache or being fetched
+      const toFetch = tokens.filter(t => {
+        const key = this.getCacheKey(t.address, t.chainId);
+        return !this.cache.has(key) && !this.pendingRequests.has(key);
+      });
+
+      if (toFetch.length === 0) return;
+
+      // Batch prefetching in smaller chunks to prevent head-of-line blocking
+      const CHUNK_SIZE = 5;
+      for (let i = 0; i < toFetch.length; i += CHUNK_SIZE) {
+        const chunk = toFetch.slice(i, i + CHUNK_SIZE);
+        await Promise.allSettled(
+          chunk.map(token => this.getIcon(token.address, token.chainId))
+        );
+      }
+    }, 100);
   }
 
   /**

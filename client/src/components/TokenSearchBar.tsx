@@ -367,11 +367,16 @@ export function TokenSearchBar({ onTokenSelect }: TokenSearchBarProps) {
                 >
                   <div className="suggestion-left">
                     <img 
+                      key={token.address}
                       src={iconUrl} 
                       alt={token.symbol}
                       style={{ width: '28px', height: '28px', borderRadius: '50%' }}
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = getPlaceholderImage();
+                        const target = e.target as HTMLImageElement;
+                        const placeholder = getPlaceholderImage();
+                        if (target.src !== placeholder) {
+                          target.src = placeholder;
+                        }
                       }}
                     />
                     <div>

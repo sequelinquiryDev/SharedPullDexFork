@@ -394,10 +394,15 @@ export function TokenInput({
           <div className="token-icon" style={{ position: 'relative', width: '28px', height: '28px' }}>
             {selectedToken ? (
               <img
+                key={selectedToken?.address}
                 src={getTokenLogoUrl(selectedToken, (selectedToken as ExtendedToken).chainId || chainId)}
                 alt={selectedToken?.symbol || "Select token"}
                 onError={(e) => {
-                  (e.target as HTMLImageElement).src = getPlaceholderImage();
+                  const target = e.target as HTMLImageElement;
+                  const placeholder = getPlaceholderImage();
+                  if (target.src !== placeholder) {
+                    target.src = placeholder;
+                  }
                 }}
                 data-testid={`img-token-${side}`}
               />
